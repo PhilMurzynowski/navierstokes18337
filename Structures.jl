@@ -6,11 +6,8 @@ Grid discretization primitives.
 #abstract type Cuboid end
 
 #=
-Staggered grid
-    u[1] is wrt west face
-    u[2] is wrt south face
-    u[3] is wrt to bottom face
-    pressure is wrt center
+Staggered grid for velocity
+Pressure is wrt center
 =#
 mutable struct Cuboid{T}
     u::Array{T, 1}
@@ -19,6 +16,7 @@ end
 
 
 mutable struct World{T, N}
+    dims::Array{Float32, 1}
     cells::Array{Cuboid{T}, N}
     
     # Intialize all cells 
@@ -31,6 +29,6 @@ mutable struct World{T, N}
             cuboid = Cuboid(zeros(3), 0.0)
         end
         fill!(world, cuboid)
-        new{type, dimension}(world)
+        new{type, dimension}(dimensions, world)
     end
 end

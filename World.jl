@@ -2,4 +2,6 @@
 Main functions to intialize and update the simulation
 =#
 
-# World
+function advanceWorld(world::World)
+    piso(world)
+end
