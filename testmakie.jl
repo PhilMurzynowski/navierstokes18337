@@ -222,6 +222,8 @@ N = n1*n2
 args_n = (a, b, c, d)
 v0 = lorenz(zeros(Point3f0, N), to_value.(args_n)...)
 positions = lift(lorenz, Node(v0), args_n...)
+print(typeof(positions))
+print(positions)
 # not entirely clear on rotations
 rotations = lift(diff, positions)
 rotations = lift(x-> push!(x, x[end]), rotations)

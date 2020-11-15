@@ -15,9 +15,11 @@ Intended for debugging.
 function boundaryCuboid(world::World, row::Int, col::Int)
     if (row == 1) || (col == 1) || (row == world.dims[1]) || (col == world.dims[2])
         return true        
+    end
     return false
 end
 
+#=
 """
 Update cuboid velocity at index [j, i].
 Likely will not be used as requires branch for every index,
@@ -32,12 +34,13 @@ function updateCuboidVelocity(world::World, new_world::World, j::Int, i::Int)
     end
 end
 """
+=#
 
 """
 Update the velocity of the cuboid at index [j, i].
 The cuboid should not be a boundary cuboid of the world.
 """
-function updateCuboidVelocity(world:World, new_world:World, j:Int, i:Int)
+function updateCuboidVelocity(world::World, new_world::World, j::Int, i::Int)
     dt, dx, dy = world.deltas
     # 1 / Re
     Re_inv = world.Re_inv
@@ -96,13 +99,13 @@ Where bidx is the key for corresponding to the indeces for each boundary cuboid,
 and aidx is the value corresponding to the indeces for the cuboid marked as adjacent
 to the boundary cuboid.
 """
-function updateBoundaryCuboidsPressure(world:World)
+function updateBoundaryCuboidsPressure(world::World)
     for (bidx, aidx) in world.boundary_adjacency
        world.cuboids[bidx[1], bidx[2]] = world.cuboids[aidx[1], aidx[2]] 
     end
 end
 
-function simple_nomtx(world:World, new_world:World)
+function simple_nomtx(world::World, new_world::World)
     
     # naive iteration, not optimized for min cache misses
     # add in check for boundary conditions
