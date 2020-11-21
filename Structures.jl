@@ -12,6 +12,7 @@ Pressure is wrt center
 mutable struct Cuboid{T}
     u::Array{T, 1}
     pressure::T
+    Δpressure::T
 end
 
 const BoundaryAdjacency = Dict{Tuple{Int, Int}, Tuple{Int, Int}}
@@ -23,16 +24,21 @@ Cuboids on periphery are boundary cuboids, are not updated in the regular fashio
     They model boundary conditions.
 """
 mutable struct World{T, N}
+    Δt::T
+    Δxyz::T
+    Re_inv::T
     dims::Array{Int, 1}
     boundary_adjacency::BoundaryAdjacency
     cuboids::Array{Cuboid{T}, N}
     
     # Intialize all cells 
     # dimensions is size in y, x, respectively
-    function World(dimension::Int, dimensions::Array{Int, 1}, type=Float64)
+    function World(Δt::T, Δxyz::T, Re::T, dimension::Int, dimensions::Array{Int, 1}, type=Float64) where T
         if dimension == 2
             cuboids = Array{Cuboid{type}, dimension}(undef, dimensions[1], dimensions[2])
-            cuboid = Cuboid(zeros(2), 0.0)
+            for idx in eachindex(cuboids)
+                cuboids[idx] = Cuboid(zeros(2), 0.0, 0.0)
+            end
             # initialize boundary adjacency for all blocks on perimiter
             # as assuming cuboid world with no internal obstacles
             boundary_adjacency = BoundaryAdjacency()
@@ -55,9 +61,11 @@ mutable struct World{T, N}
             end
         elseif dimension == 3    
             cuboids = Array{Cuboid{type}, dimension}(undef, dimensions[1], dimensions[2], dimensions[3])
-            cuboid = Cuboid(zeros(3), 0.0)
+            for idx in eachindex(cuboids)
+                cuboids[idx] = Cuboid(zeros(3), 0.0, 0.0)
+            end
         end
-        fill!(cuboids, cuboid)
-        new{type, dimension}(dimensions, boundary_adjacency, cuboids)
+        Re_inv = 1 / Re
+        new{type, dimension}(Δt, Δxyz, Re_inv, dimensions, boundary_adjacency, cuboids)
     end
 end
