@@ -1,7 +1,7 @@
 using Kronecker
 using LinearAlgebra
 
-N = 10
+N = 3
 dx, dy = 1/N, 1/N
 # if dx = dy, can abstract to h
 h = dx
@@ -11,7 +11,7 @@ dxi, dyi, hi = 1/dx, 1/dy, 1/h
 # the plus one might be handling? unclear
 
 # interleave u and v update to mitigate cache misses for large matrices?
-
+# indexing is flipped here!
 for j in jmin:jmax
     for i in imin+1:imax
         v_here = 0.25 * ( v[i-1, j] + v[i-1, j+1] + v[i, j] + v[i, j+1])
@@ -50,3 +50,11 @@ L[diagind(L, 1)] .= -1*hi^2
 Id = 1*Matrix(I, N, N)
 P = (Id ⊗ L) + (L ⊗ Id)
 # Von Neumann BC and reference point modifications
+BC = zeros(N, N)
+BC[1, 1] = -1
+BC[N, N] = -1
+P += (Id ⊗ BC)
+P[1:N, 1:N] += -1*Id
+P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -1*Id
+P[1, :] .= 0
+P[1, 1] = 1
