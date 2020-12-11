@@ -9,27 +9,28 @@ function predict_vel(u, v, u_new, v_new, opts)
     dt = opts["dt"]
     dxi = opts["dxi"]
     dyi = opts["dyi"]
+    mu = opts["mu"]
     # interleave u and v update to mitigate cache misses for large matrices?
-    for j in jmin:jmax
-        for i in imin+1:imax
-            v_interpolated = 0.25 * ( v[j, i-1] + v[j+1, i-1] + v[j, i] + v[j+1, i])
-            update = (u[j, i-1] - 2*u[j, i] + u[j, i+1]) * dxi^2
-            update += (u[j-1, i] - 2*u[j, i] + u[j+1, i]) * dyi^2
-            update -= u[j, i] * (u[j, i+1] - u[j, i-1]) * 0.5 * dxi
-            update -= v_interpolated * (u[j+1, i] - u[j-1, i]) * 0.5 * dyi
-            update *= dt
-            u_new[j, i] += u[j, i] + update
-        end
-    end
     for j in jmin+1:jmax
         for i in imin:imax
             u_interpolated = 0.25 * ( u[j-1, i] + u[j, i] + u[j-1, i+1] + u[j, i+1])
-            update = (v[j, i-1] - 2*v[j, i] + v[j, i+1]) * dxi^2
-            update += (v[j-1, i] - 2*v[j, i] + v[j+1, i]) * dyi^2
-            update -= v[j, i] * (v[j+1, i] - u[j-1, i]) * 0.5 * dyi
-            update -= u_interpolated * (v[j, i+1] - v[j, i-1]) * 0.5 * dxi
-            update *= dt
-            v_new[j, i] += v[j, i] + update
+            v_update = (v[j, i-1] - 2*v[j, i] + v[j, i+1]) * dxi^2 * mu
+            v_update += (v[j-1, i] - 2*v[j, i] + v[j+1, i]) * dyi^2 * mu
+            v_update -= v[j, i] * (v[j+1, i] - v[j-1, i]) * 0.5 * dyi
+            v_update -= u_interpolated * (v[j, i+1] - v[j, i-1]) * 0.5 * dxi
+            v_update *= dt
+            v_new[j, i] = v[j, i] + v_update
+        end
+    end
+    for j in jmin:jmax
+        for i in imin+1:imax
+            v_interpolated = 0.25 * ( v[j, i-1] + v[j+1, i-1] + v[j, i] + v[j+1, i])
+            u_update = (u[j, i-1] - 2*u[j, i] + u[j, i+1]) * dxi^2 * mu
+            u_update += (u[j-1, i] - 2*u[j, i] + u[j+1, i]) * dyi^2 * mu
+            u_update -= u[j, i] * (u[j, i+1] - u[j, i-1]) * 0.5 * dxi
+            u_update -= v_interpolated * (u[j+1, i] - u[j-1, i]) * 0.5 * dyi
+            u_update *= dt
+            u_new[j, i] = u[j, i] + u_update
         end
     end
 end
@@ -152,50 +153,6 @@ function update_vel_BC(u, v, vel_BC, opts)
 end
 
 
-# NOT entirely original implementation here, testing guide
-
-# initialize problem
-# highlevel parameters
-# number of cells in one axis
-# Note: currenlty assuming symmetric, Nx = Ny
-# If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 5
-Nx, Ny = N, N
-dx, dy = 1/N, 1/N
-h = dx # if dx = dy, can abstract to h
-# fluid parameters
-rho = 1
-# ADD parameter for viscosity
-# timestep chosen with CFL condition uΔt/Δx < 1
-dt = 0.1*h
-# inverses for convenience
-dxi, dyi, hi, dti, rhoi = 1/dx, 1/dy, 1/h, 1/dt, 1/rho
-# convenienet indeces when iterating
-# BC prevent starting count from 1
-imin, jmin = 2, 2
-imax, jmax = Nx + 1, Ny + 1
-
-# group params
-opts = Dict("N"=>N,
-            "Nx"=>Nx,
-            "Ny"=>Ny,
-            "dx"=>dx,
-            "dy"=>dy,
-            "dxi"=>dxi,
-            "dyi"=>dyi,
-            "h"=>h,
-            "hi"=>hi,
-            "dt"=>dt,
-            "dti"=>dti,
-            "rho"=>rho,
-            "rhoi"=>rhoi,
-            "imin"=>imin,
-            "jmin"=>jmin,
-            "imax"=>imax,
-            "jmax"=>jmax,
-            "t0"=>0.0,
-            "T"=>0.1
-            )
 
 function runExample(opts)
     Ny = opts["Ny"]
@@ -229,15 +186,72 @@ function runExample(opts)
         predict_vel(u, v, u_new, v_new, opts)
         u, u_new = u_new, u # swap, memory reuse
         v, v_new = v_new, v
+        #println("u")
+        #display(u)
+        #println("v")
+        #display(v)
+        #println("u_new")
+        #display(u_new)
+        #println("v_new")
+        #display(v_new)
         update_poisson_RHS(u, v, R, opts)
         pressure_solve(P, R, p, opts)
         correct_vel(u, v, p_matrix, opts)
         # can option to plot here
     end
     # plot
+    # they come out upside down! fix!
+    # remember outermost boundaries are fictitious!
     display(u)
     display(v)
     display(p)
 end
+
+# NOT entirely original implementation here, testing guide
+
+# initialize problem
+# highlevel parameters
+# number of cells in one axis
+# Note: currenlty assuming symmetric, Nx = Ny
+# If using Nx and Ny instead of N, it is largely for readability / clarity
+N = 5
+Nx, Ny = N, N
+dx, dy = 1/N, 1/N
+h = dx # if dx = dy, can abstract to h
+# fluid parameters
+rho = 1000
+mu = 1
+# timestep chosen with CFL condition uΔt/Δx < 1
+dt = 0.1*h
+# inverses for convenience
+dxi, dyi, hi, dti, rhoi = 1/dx, 1/dy, 1/h, 1/dt, 1/rho
+# convenienet indeces when iterating
+# BC prevent starting count from 1
+imin, jmin = 2, 2
+imax, jmax = Nx + 1, Ny + 1
+
+# group params
+opts = Dict("N"=>N,
+            "Nx"=>Nx,
+            "Ny"=>Ny,
+            "dx"=>dx,
+            "dy"=>dy,
+            "dxi"=>dxi,
+            "dyi"=>dyi,
+            "h"=>h,
+            "hi"=>hi,
+            "dt"=>dt,
+            "dti"=>dti,
+            "rho"=>rho,
+            "mu"=>mu,
+            "rhoi"=>rhoi,
+            "imin"=>imin,
+            "jmin"=>jmin,
+            "imax"=>imax,
+            "jmax"=>jmax,
+            "t0"=>0.0,
+            "T"=>0.2
+            )
+
 
 runExample(opts)
