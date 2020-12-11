@@ -61,7 +61,9 @@ function init_BCLaplacian(opts)
     P[1:N, 1:N] += -1*Id
     P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -1*Id
     P[1, :] .= 0
-    P[1, 1] = 1
+    P[1, 1] = 1*hi^2
+    #P[N^2, :] .= 0
+    #P[N^2, N^2] = 1*hi^2
     return P
 end
 
@@ -174,7 +176,7 @@ function runExample(opts)
 
     # Velocity BC
     # velocity BC for lid driven flow problem
-    vel_BC = Dict("u_top"=>1,
+    vel_BC = Dict("u_top"=>0.5,
                   "u_bottom"=>0,
                   "v_left"=>0,
                   "v_right"=>0)
@@ -195,7 +197,12 @@ function runExample(opts)
         #println("v_new")
         #display(v_new)
         update_poisson_RHS(u, v, R, opts)
+        #display(R)
         pressure_solve(P, R, p, opts)
+        #display(P)
+        #display(R)
+        #display(p)
+        #return
         correct_vel(u, v, p_matrix, opts)
         # can option to plot here
     end
@@ -214,15 +221,17 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 5
+N = 15
 Nx, Ny = N, N
-dx, dy = 1/N, 1/N
-h = dx # if dx = dy, can abstract to h
+#h = 1/N
+h = 1
+# if dx = dy, can abstract to h
+dx, dy = h, h
 # fluid parameters
-rho = 1000
-mu = 1
+rho = 1
+mu = .1
 # timestep chosen with CFL condition uΔt/Δx < 1
-dt = 0.1*h
+dt = 0.001
 # inverses for convenience
 dxi, dyi, hi, dti, rhoi = 1/dx, 1/dy, 1/h, 1/dt, 1/rho
 # convenienet indeces when iterating
@@ -250,7 +259,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.2
+            "T"=>1.0
             )
 
 
