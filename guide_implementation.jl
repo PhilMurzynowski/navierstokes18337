@@ -2,15 +2,30 @@ using Kronecker
 using LinearAlgebra
 
 N = 3
+# Note: assuming symmetric, Nx = Ny
+# If using Nx and Ny instead of N, it is largely for readability / clarity
+Nx, Ny = N, N
 dx, dy = 1/N, 1/N
-dt = 0.1
 # if dx = dy, can abstract to h
 h = dx
-dxi, dyi, hi, dti = 1/dx, 1/dy, 1/h, 1/dt
 rho = 1
+dxi, dyi, hi, dti, rhoi = 1/dx, 1/dy, 1/h, 1/dt, 1/rho
+
+# velocity BC for lid driven flow problem
+u_top = 1
+u_bottom, v_left, v_right = 0, 0, 0
+
+# timestep chosen with CFL condition uΔt/Δx < 1
+dt = 0.1*h
+
 # NOT entirely original implementation here, testing guide
 # what about boundary conditions, sentinel?
 # the plus one might be handling? unclear
+
+# convenienet indeces when iterating
+# BC prevent starting count from 1
+imin, jmin = 2, 2
+imax, jmax = Nx + 1, Ny + 1
 
 # interleave u and v update to mitigate cache misses for large matrices?
 # indexing is flipped here!
@@ -72,9 +87,43 @@ v = [1; 2]
 for j in jmin:jmax
     for i in imin:imax
         n += 1
-        R[n] = −rho*dti*((u[i+1, j] - u[i, j])*dxi + (v[i, j+1] - v[i, j])*dyi)
+        R[n] = -rho*dti*((u[i+1, j] - u[i, j])*dxi + (v[i, j+1] - v[i, j])*dyi)
     end
 end
     
+# example using a direct solve
+p = P \ R
 # use a view+reshape to use pressure in matrix form
 # solver will output vector
+p_matrix = @view p
+p_matrix = reshape(p_matrix, Ny, Nx)
+
+# velocity correction with updated pressure
+# flipped!
+# tranpose or fuse loops somehow?
+# also iterating from jmin to jmax may be super weird?
+# if jmin is on bottom then traversing up the rows?
+# can benchmark against linear solve and see how consequential
+# use SIMD, @SIMD?
+for j in jmin:jmax
+    for i=imin+1:imax
+        u[i, j] -= dt*rhoi*dxi* (p[i, j] - p[i-1, j])
+    end
+end
+for j=jmin+1: jmax
+    for i=imin : imax
+        v[i, j] -= dt*rhoi*dyi* (p[i, j] - p[i, j-1])
+    end
+end
+    
+# BC
+# BC for pressure already handled in the modified 2D Laplacian matrix
+# BC for velocity using fictitious velocities
+# perhaps can fuse these into previous loops so don't have huge cache misses
+# just pad the initial matrices for v and u with 1 or 2 layers? (depending on whether us jmax+1 and jmin-1, etc)
+# flipped
+u[:, jmin-1] = u[:, jmin] - 2*(u[:, jmin] - u_bottom)
+u[:, jmax+1] = u[:, jmax] - 2*(u[:, jmax] - u_top)
+v[imin-1, :] = v[imin, :] - 2*(v[imin, :] - v_left)
+v[imax+1, :] = v[imax, :] - 2*(v[imax, :] - v_right)
+
