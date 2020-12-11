@@ -89,9 +89,10 @@ function update_poisson_RHS(u, v, R, opts)
     end
 end
 
-function pressure_solve(P, R, p, opts)
+function pressure_solve(P, R, opts)
     # direct solve currently
     p = P \ R
+    return p 
 end
 
 # velocity correction with updated pressure
@@ -117,6 +118,8 @@ function correct_vel(u, v, p_matrix, opts)
     for j in 2:Ny
         for i in 1:Nx
             v[j+1, i+1] -= dt*rhoi*dyi* (p_matrix[j, i] - p_matrix[j-1, i])
+            #println(p_matrix[j, i])
+            #println(v[j+1, i+1])
         end
     end
 end
@@ -169,8 +172,6 @@ function runExample(opts)
     p = zeros(Ny*Nx)
     # R is RHS of Pressure Poisson Equation
     R = zeros(Ny*Nx)
-    p_matrix = @view p[:, :]
-    p_matrix = reshape(p_matrix, Ny, Nx)
     # Laplacian with BC
     P = init_BCLaplacian(opts)
 
@@ -198,11 +199,10 @@ function runExample(opts)
         #display(v_new)
         update_poisson_RHS(u, v, R, opts)
         #display(R)
-        pressure_solve(P, R, p, opts)
-        #display(P)
-        #display(R)
-        #display(p)
-        #return
+        p = pressure_solve(P, R, opts)
+        # view and reshape here for readability
+        p_matrix = @view p[:, :]
+        p_matrix = reshape(p_matrix, Ny, Nx)
         correct_vel(u, v, p_matrix, opts)
         # can option to plot here
     end
@@ -224,11 +224,11 @@ end
 N = 15
 Nx, Ny = N, N
 #h = 1/N
-h = 1
+h = 1/N
 # if dx = dy, can abstract to h
 dx, dy = h, h
 # fluid parameters
-rho = 1
+rho = 1000
 mu = .1
 # timestep chosen with CFL condition uΔt/Δx < 1
 dt = 0.001
@@ -259,7 +259,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>1.0
+            "T"=>0.01
             )
 
 
