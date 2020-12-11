@@ -3,9 +3,11 @@ using LinearAlgebra
 
 N = 3
 dx, dy = 1/N, 1/N
+dt = 0.1
 # if dx = dy, can abstract to h
 h = dx
-dxi, dyi, hi = 1/dx, 1/dy, 1/h
+dxi, dyi, hi, dti = 1/dx, 1/dy, 1/h, 1/dt
+rho = 1
 # NOT entirely original implementation here, testing guide
 # what about boundary conditions, sentinel?
 # the plus one might be handling? unclear
@@ -58,3 +60,21 @@ P[1:N, 1:N] += -1*Id
 P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -1*Id
 P[1, :] .= 0
 P[1, 1] = 1
+
+# RHS of Pressure Poisson Equation
+# do not reinitialize R every single time
+# indeces are flipped!
+# to fill out in column major order for both keep u transposed?
+#   can check if makes differences
+R = zeros(N^2)
+u = 1
+v = [1; 2]
+for j in jmin:jmax
+    for i in imin:imax
+        n += 1
+        R[n] = −rho*dti*((u[i+1, j] - u[i, j])*dxi + (v[i, j+1] - v[i, j])*dyi)
+    end
+end
+    
+# use a view+reshape to use pressure in matrix form
+# solver will output vector
