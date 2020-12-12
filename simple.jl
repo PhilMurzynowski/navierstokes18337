@@ -112,7 +112,7 @@ function poissonRSIMPLE(u, v, R, opts)
     for j in jmin:jmax
         for i in imin:imax
             #R[k] = -rho*dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
-            R[k] = -1*dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
+            R[k] = -dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
             k += 1
         end
     end
@@ -161,20 +161,18 @@ function plot_uvp(u, v, p, opts)
     # not sure if can use streamplot
     xs = 0.0:h:h*(N+1)
     ys = reverse(0.0:h:h*(N+1))
-    velocity_scene = quiver(xs, ys, u', v', arrowsize = 0.1)
+    quiv = quiver(xs, ys, u', v', arrowsize = 0.1)
 
     # pressure
     pressure = reshape(p, N, N)
     xs = 0.0:h:h*(N-1)
     ys = reverse(0.0:h:h*(N-1))
-    parent = Scene(resolution= (500, 500))
     hm = heatmap(xs, ys, pressure)
     cl = colorlegend(hm[end], raw = true, camera = campixel!)
-    pressure_scene = vbox(hm, cl, parent = parent)
 
-    # display will only display most recent scene
-    #display(velocity_scene)
-    display(pressure_scene)
+    parent = Scene(resolution= (1000, 500))
+    full_scene = vbox(vbox(hm, cl), quiv, parent=parent)
+    display(full_scene)
     return
 end
 
@@ -285,7 +283,7 @@ dx, dy = h, h
 # fluid parameters
 rho = 100   # may not be used depending on impl
 mu = .1     # may not be used depending on impl
-Re = 500    # may not be used depending on impl
+Re = 100    # may not be used depending on impl
 # timestep chosen with CFL condition uΔt/Δx < 1
 dt = 1
 # inverses for convenience
@@ -317,7 +315,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>10.0 # working for one timestep?
+            "T"=>9.0 # working for one timestep?
             )
 
 
