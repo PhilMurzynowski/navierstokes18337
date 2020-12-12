@@ -189,16 +189,7 @@ function runExample(opts)
         predict_vel(u, v, u_new, v_new, opts)
         u, u_new = u_new, u # swap, memory reuse
         v, v_new = v_new, v
-        #println("u")
-        #display(u)
-        #println("v")
-        #display(v)
-        #println("u_new")
-        #display(u_new)
-        #println("v_new")
-        #display(v_new)
         update_poisson_RHS(u, v, R, opts)
-        #display(R)
         p = pressure_solve(P, R, opts)
         # view and reshape here for readability
         p_matrix = @view p[:, :]
@@ -221,17 +212,17 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 15
+N = 5
 Nx, Ny = N, N
-#h = 1/N
 h = 1/N
+#h = 1/100
 # if dx = dy, can abstract to h
 dx, dy = h, h
 # fluid parameters
-rho = 1000
+rho = 100
 mu = .1
 # timestep chosen with CFL condition uΔt/Δx < 1
-dt = 0.001
+dt = 0.01
 # inverses for convenience
 dxi, dyi, hi, dti, rhoi = 1/dx, 1/dy, 1/h, 1/dt, 1/rho
 # convenienet indeces when iterating
@@ -259,7 +250,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.01
+            "T"=>0.1
             )
 
 
