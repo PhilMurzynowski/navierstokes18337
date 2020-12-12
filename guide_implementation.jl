@@ -217,8 +217,8 @@ function runExample(opts)
     # plot
     # they come out upside down! fix!
     # remember outermost boundaries are fictitious!
-    #display(u)
-    #display(v)
+    display(u)
+    display(v)
     #plot_uvp(u, v, p, opts)
 
 end
