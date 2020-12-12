@@ -165,9 +165,13 @@ function plot_uvp(u, v, p, opts)
     N = opts["N"]
     xs = 0.0:h:h*(N+2)
     ys = 0.0:h:h*(N+2)
-    arrows(xs, ys, u, v, arrowsize=0.05)
+    sceneA = arrows(xs, ys, u, v, arrowsize=0.05)
     pressure = reshape(p, N, N)
-    display(AbstractPlotting.heatmap(xs, ys, pressure))
+    sceneH = AbstractPlotting.heatmap(xs, ys, pressure)
+
+    # display will only display most recent scene
+    display(sceneA)
+    #display(sceneH)
     return
 end
 
@@ -209,13 +213,13 @@ function runExample(opts)
         correct_vel(u, v, p_matrix, opts)
         # can option to plot here
     end
+
     # plot
     # they come out upside down! fix!
     # remember outermost boundaries are fictitious!
-    display(u)
-    display(v)
-    #display(p)
-    plot_uvp(u, v, p, opts)
+    #display(u)
+    #display(v)
+    #plot_uvp(u, v, p, opts)
 
 end
 
