@@ -142,22 +142,26 @@ end
 function plot_uvp(u, v, p, opts)
     h = opts["h"]
     N = opts["N"]
-    #=
-    using arrows
+   
     # have to do some transposing and reversing here for formatting
     # reverse ys because jmin is near top, while origin is bottom left
-    xs = 0.0:h:h*(N+2)
-    ys = reverse(0.0:h:h*(N+2))
-    sceneA = arrows(xs, ys, u', v, arrowsize=0.05)
-    =#
+    display(u)
+    display(v)
+    # using quiver
+    # not sure if can use streamplot
+    xs = 0.0:h:h*(N+1)
+    ys = reverse(0.0:h:h*(N+1))
+    velocity_scene = quiver(xs, ys, u', v', arrowsize = 0.1)
 
-    # using streamplot
+    # pressure
     pressure = reshape(p, N, N)
-    sceneH = AbstractPlotting.heatmap(xs, ys, pressure)
+    xs = 0.0:h:h*(N-1)
+    ys = reverse(0.0:h:h*(N-1))
+    pressure_scene = AbstractPlotting.heatmap(xs, ys, pressure)
 
     # display will only display most recent scene
-    display(sceneA)
-    #display(sceneH)
+    display(velocity_scene)
+    #display(pressure_scene)
     return
 end
 
@@ -180,18 +184,18 @@ function runSIMPLE(opts)
 
     # Velocity BC
     # velocity BC for lid driven flow problem
-    vel_BC = Dict("u_top"=>0.5,
-                  "u_bottom"=>0,
-                  "v_left"=>0.1,
-                  "v_right"=>0)
+    vel_BC = Dict("u_top"=>0.2,
+                  "u_bottom"=>0.0,
+                  "v_left"=>0.0,
+                  "v_right"=>0.0)
 
     t0, T = opts["t0"], opts["T"]
     # time loop
     for t in t0:dt:T
         update_vel_BC(u, v, vel_BC, opts)
-        #predict_vel(u, v, u_new, v_new, opts)
-        #u, u_new = u_new, u # swap, memory reuse
-        #v, v_new = v_new, v
+        predict_vel(u, v, u_new, v_new, opts)
+        u, u_new = u_new, u # swap, memory reuse
+        v, v_new = v_new, v
         #update_poisson_RHS(u, v, R, opts)
         #p_corrector = pressure_solve(P, R, opts)
         ## view and reshape here for readability
@@ -203,8 +207,8 @@ function runSIMPLE(opts)
 
     # plot
     # remember outermost boundaries are fictitious!
-    display(u)
-    display(v)
+    #display(u)
+    #display(v)
     #display(p_corrector)
     plot_uvp(u, v, p, opts)
 end
@@ -256,7 +260,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.001
+            "T"=>0.003
             )
 
 
