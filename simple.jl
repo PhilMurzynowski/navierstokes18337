@@ -26,6 +26,7 @@ function update_vel_BC(u, v, vel_BC, opts)
     u[jmax+1, :] = u_jmax .- 2*(u_jmax .- u_bottom)
     v[:, imin-1] = v_imin .- 2*(v_imin .- v_left)
     v[:, imax+1] = v_imax .- 2*(v_imax .- v_right)
+    return
 end
 
 # NOTE! the signs may be incorrect!!
@@ -46,7 +47,7 @@ function predictorSIMPLE(u, v, p, u_new, v_new, opts)
             # calculations using interpolated velocites
             a1 = -(u[j, i+1]^2 - u[j, i-1]^2)/(2*Δx) - v_interpolated*(u[j+1, i] - u[j-1, i])/(2*Δy)
             # may be off by a sign here, a1, check
-            A = -a1 + Re_inv*(a3 + a4)
+            A = a1 + Re_inv*(a3 + a4)
             # u^{n+1}
             #                                   edited indices here
             u_new[j, i] = u[j, i] + Δt*(A - (p[j, i] - p[j, i-1])/Δx)
@@ -62,12 +63,13 @@ function predictorSIMPLE(u, v, p, u_new, v_new, opts)
             # calculations using interpolated velocites
             b1 = -(v[j+1, i]^2 - v[j-1, i]^2)/(2*Δy) - u_interpolated*(v[j, i+1] - v[j, i-1])/(2*Δx)
             # may be off by a sign here, b1, check
-            B = -b1 + Re_inv*(b3 + b4)
+            B = b1 + Re_inv*(b3 + b4)
             # v^{n+1}
             #                                   edited indices here
             v_new[j, i] = v[j, i] + Δt*(B - (p[j, i] - p[j-1, i])/Δy)
         end
     end
+    return
 end
 
 #=
@@ -150,8 +152,8 @@ function plot_uvp(u, v, p, opts)
    
     # have to do some transposing and reversing here for formatting
     # reverse ys because jmin is near top, while origin is bottom left
-    display(u)
-    display(v)
+    #display(u)
+    #display(v)
     # using quiver
     # not sure if can use streamplot
     xs = 0.0:h:h*(N+1)
@@ -168,8 +170,8 @@ function plot_uvp(u, v, p, opts)
     pressure_scene = vbox(hm, cl, parent = parent)
 
     # display will only display most recent scene
-    #display(velocity_scene)
-    display(pressure_scene)
+    display(velocity_scene)
+    #display(pressure_scene)
     return
 end
 
@@ -204,13 +206,22 @@ function runSIMPLE(opts)
         predict_vel(u, v, u_new, v_new, opts)
         u, u_new = u_new, u # swap, memory reuse
         v, v_new = v_new, v
-        #update_poisson_RHS(u, v, R, opts)
-        #p_corrector = pressure_solve(P, R, opts)
-        ## view and reshape here for readability
-        #p_corrector_mtx = @view p_corrector[:, :]
-        #p_corrector_mtx = reshape(p_corrector_mtx, Ny, Nx)
-        #vel_corrector(u, v, p_corrector_mtx, opts)
-        #p += p_corrector
+        #println("u")
+        #display(u)
+        #println("v")
+        #display(v)
+        update_poisson_RHS(u, v, R, opts)
+        #println("R")
+        #display(R)
+        p_corrector = pressure_solve(P, R, opts)
+        #println("p_corrector")
+        #display(p_corrector)
+        # view and reshape here for readability
+        p_corrector_mtx = @view p_corrector[:, :]
+        p_corrector_mtx = reshape(p_corrector_mtx, Ny, Nx)
+        vel_corrector(u, v, p_corrector_mtx, opts)
+        p += p_corrector
+        #return
     end
 
     # plot
@@ -219,6 +230,7 @@ function runSIMPLE(opts)
     #display(v)
     #display(p_corrector)
     plot_uvp(u, v, p, opts)
+    return
 end
 
 
@@ -227,7 +239,7 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 3
+N = 10
 Nx, Ny = N, N
 h = 1
 #h = 1/100
@@ -238,7 +250,7 @@ rho = 100   # may not be used depending on impl
 mu = .1     # may not be used depending on impl
 Re = 500    # may not be used depending on impl
 # timestep chosen with CFL condition uΔt/Δx < 1
-dt = 0.001
+dt = 0.01
 # inverses for convenience
 dxi, dyi, hi, dti, rhoi, Rei = 1/dx, 1/dy, 1/h, 1/dt, 1/rho, 1/Re
 # convenienet indeces when iterating
@@ -268,7 +280,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.003
+            "T"=>0.00 # working for one timestep?
             )
 
 
