@@ -47,7 +47,7 @@ function predictVelSIMPLE(u, v, p_matrix, u_new, v_new, opts)
             # calculations using interpolated velocites
             a1 = -(u[j, i+1]^2 - u[j, i-1]^2)/(2*Δx) - v_interpolated*(u[j+1, i] - u[j-1, i])/(2*Δy)
             # may be off by a sign here, a1, check
-            A = a1 + Re_inv*(a3 + a4)
+            A = -a1 + Re_inv*(a3 + a4)
             # u^{n+1}
             #                                   edited indices here
             # p_matrix subtracts, j-1, i-1, as of different size, N x N
@@ -64,7 +64,7 @@ function predictVelSIMPLE(u, v, p_matrix, u_new, v_new, opts)
             # calculations using interpolated velocites
             b1 = -(v[j+1, i]^2 - v[j-1, i]^2)/(2*Δy) - u_interpolated*(v[j, i+1] - v[j, i-1])/(2*Δx)
             # may be off by a sign here, b1, check
-            B = b1 + Re_inv*(b3 + b4)
+            B = -b1 + Re_inv*(b3 + b4)
             # v^{n+1}
             #                                   edited indices here
             # p_matrix subtracts, j-1, i-1, as of different size, N x N
@@ -137,12 +137,13 @@ function velCorSIMPLE(u, v, p_corrector_mtx, opts)
     # fuse loops, tranpose?
     for i in 2:Nx
         for j in 1:Ny
-            u[j+1, i+1] += 1 / (Δt*Δx) * (p_corrector_mtx[j, i] - p_corrector_mtx[j, i-1])
+            # note this must be minus, as u' is -1*RHS of eq below
+            u[j+1, i+1] -= 1 / (Δt*Δx) * (p_corrector_mtx[j, i] - p_corrector_mtx[j, i-1])
         end
     end
     for i in 1:Nx
         for j in 2:Ny
-            v[j, i] += 1 / (Δt*Δy) * (p_corrector_mtx[j, i] - p_corrector_mtx[j-1, i])
+            v[j, i] -= 1 / (Δt*Δy) * (p_corrector_mtx[j, i] - p_corrector_mtx[j-1, i])
         end
     end
     return
@@ -172,8 +173,8 @@ function plot_uvp(u, v, p, opts)
     pressure_scene = vbox(hm, cl, parent = parent)
 
     # display will only display most recent scene
-    display(velocity_scene)
-    #display(pressure_scene)
+    #display(velocity_scene)
+    display(pressure_scene)
     return
 end
 
@@ -199,7 +200,7 @@ function BCLaplacianSIMPLE(opts)
     P[1, :] .= 0
     P[1, 1] = 1*hi^2
     #P[N^2, :] .= 0
-    #P[N^2, N^2] = 1*hi^2
+    #P[N^2, 1] = 1*hi^2
     return P
 end
 
@@ -240,9 +241,11 @@ function runSIMPLE(opts)
         #display(u)
         #println("v")
         #display(v)
+        #poissonRSIMPLE(u, v, R, opts)
         poissonRSIMPLE(u, v, R, opts)
         #println("R")
         #display(R)
+        # debugging
         p_corrector = pressureSolveSIMPLE(P, R, opts)
         #println("p_corrector")
         #display(p_corrector)
@@ -254,7 +257,7 @@ function runSIMPLE(opts)
         #display(u)
         #println("corrected v")
         #display(v)
-        #p += p_corrector
+        p += p_corrector
         #return
     end
 
@@ -273,7 +276,7 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 10
+N = 32
 Nx, Ny = N, N
 h = 1
 #h = 1/100
