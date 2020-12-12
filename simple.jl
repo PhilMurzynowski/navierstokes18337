@@ -31,7 +31,7 @@ end
 
 # NOTE! the signs may be incorrect!!
 # double check
-function predictorSIMPLE(u, v, p, u_new, v_new, opts)
+function predictor_vel(u, v, p_matrix, u_new, v_new, opts)
     Δt = opts["dt"]
     Δx, Δy = opts["dx"], opts["dy"]
     Re_inv = opts["Rei"]
@@ -50,7 +50,7 @@ function predictorSIMPLE(u, v, p, u_new, v_new, opts)
             A = a1 + Re_inv*(a3 + a4)
             # u^{n+1}
             #                                   edited indices here
-            u_new[j, i] = u[j, i] + Δt*(A - (p[j, i] - p[j, i-1])/Δx)
+            u_new[j, i] = u[j, i] + Δt*(A - (p_matrix[j, i] - p_matrix[j, i-1])/Δx)
         end
     end
     for i in imin:imax
@@ -66,7 +66,7 @@ function predictorSIMPLE(u, v, p, u_new, v_new, opts)
             B = b1 + Re_inv*(b3 + b4)
             # v^{n+1}
             #                                   edited indices here
-            v_new[j, i] = v[j, i] + Δt*(B - (p[j, i] - p[j-1, i])/Δy)
+            v_new[j, i] = v[j, i] + Δt*(B - (p_matrix[j, i] - p_matrix[j-1, i])/Δy)
         end
     end
     return
@@ -170,8 +170,8 @@ function plot_uvp(u, v, p, opts)
     pressure_scene = vbox(hm, cl, parent = parent)
 
     # display will only display most recent scene
-    display(velocity_scene)
-    #display(pressure_scene)
+    #display(velocity_scene)
+    display(pressure_scene)
     return
 end
 
@@ -203,7 +203,9 @@ function runSIMPLE(opts)
     # time loop
     for t in t0:dt:T
         update_vel_BC(u, v, vel_BC, opts)
-        predict_vel(u, v, u_new, v_new, opts)
+        p_matrix = @view p[:, :]
+        p_matrix = reshape(p_matrix, Ny, Nx)
+        predictor_vel(u, v, p_matrix, u_new, v_new, opts)
         u, u_new = u_new, u # swap, memory reuse
         v, v_new = v_new, v
         #println("u")
@@ -280,7 +282,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.00 # working for one timestep?
+            "T"=>0.0 # working for one timestep?
             )
 
 
