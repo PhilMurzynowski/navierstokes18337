@@ -1,4 +1,9 @@
 
+using Kronecker
+using LinearAlgebra
+using Makie, AbstractPlotting
+using AbstractPlotting: Node, hbox, vbox, heatmap
+
 """
 Maintain BC for velocity using ficitious velocities.
 """
@@ -157,11 +162,14 @@ function plot_uvp(u, v, p, opts)
     pressure = reshape(p, N, N)
     xs = 0.0:h:h*(N-1)
     ys = reverse(0.0:h:h*(N-1))
-    pressure_scene = AbstractPlotting.heatmap(xs, ys, pressure)
+    parent = Scene(resolution= (500, 500))
+    hm = heatmap(xs, ys, pressure)
+    cl = colorlegend(hm[end], raw = true, camera = campixel!)
+    pressure_scene = vbox(hm, cl, parent = parent)
 
     # display will only display most recent scene
-    display(velocity_scene)
-    #display(pressure_scene)
+    #display(velocity_scene)
+    display(pressure_scene)
     return
 end
 
