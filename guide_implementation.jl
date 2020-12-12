@@ -1,5 +1,8 @@
 using Kronecker
 using LinearAlgebra
+using Makie, AbstractPlotting
+
+Makie.AbstractPlotting.inline!(false)
 
 function predict_vel(u, v, u_new, v_new, opts)
     jmin = opts["jmin"]
@@ -157,7 +160,16 @@ function update_vel_BC(u, v, vel_BC, opts)
     v[:, imax+1] = v_imax .- 2*(v_imax .- v_right)
 end
 
-
+function plot_uvp(u, v, p, opts)
+    h = opts["h"]
+    N = opts["N"]
+    xs = 0.0:h:h*(N+2)
+    ys = 0.0:h:h*(N+2)
+    arrows(xs, ys, u, v, arrowsize=0.05)
+    pressure = reshape(p, N, N)
+    display(AbstractPlotting.heatmap(xs, ys, pressure))
+    return
+end
 
 function runExample(opts)
     Ny = opts["Ny"]
@@ -202,7 +214,9 @@ function runExample(opts)
     # remember outermost boundaries are fictitious!
     display(u)
     display(v)
-    display(p)
+    #display(p)
+    plot_uvp(u, v, p, opts)
+
 end
 
 # NOT entirely original implementation here, testing guide
@@ -250,7 +264,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>0.1
+            "T"=>0.01
             )
 
 
