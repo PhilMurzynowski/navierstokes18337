@@ -183,19 +183,20 @@ function plot_uvp(u, v, p, opts)
     #p[2] = 2
     #p[3] = 3
     #p[65] = 4
-    # transpose when reshaping here??
-    # might need pressure reshaped into row major because formed laplacian that way
-    pressure = reshape(p, N, N)'
-    display(pressure)
-    xs = 0.0:h:h*(N-1)
-    ys = 0.0:h:h*(N-1)
-    #ys = reverse(0.0:h:h*(N-1))
-    hm = heatmap(xs, ys, pressure)
+    # transpose and flip when plotting cause heatmap is weird
+    pressure = reshape(p, N, N)
+    #println("pressure")
+    #display(pressure)
+    p_xs = 0.0:h:h*(N-1)
+    p_ys = 0.0:h:h*(N-1)
+    hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(pressure', dims=2))
     cl = colorlegend(hm[end], raw = true, camera = campixel!)
 
     parent = Scene(resolution= (1000, 500))
     full_scene = vbox(vbox(hm, cl), quiv, parent=parent)
     display(full_scene)
+
+    #test
     return
 end
 
@@ -244,7 +245,7 @@ function runSIMPLE(opts)
 
     # Velocity BC
     # velocity BC for lid driven flow problem
-    vel_BC = Dict("u_top"=>0.5,
+    vel_BC = Dict("u_top"=>0.3,
                   "u_bottom"=>0.0,
                   "v_left"=>0.0,
                   "v_right"=>0.0)
@@ -264,8 +265,8 @@ function runSIMPLE(opts)
         #display(v)
         #poissonRSIMPLE(u, v, R, opts)
         poissonRSIMPLE(u, v, R, opts)
-        #println("R")
-        #display(R)
+        println("R")
+        display(R)
         # debugging
         p_corrector = pressureSolveSIMPLE(P, R, opts)
         # view and reshape here for readability
@@ -273,7 +274,7 @@ function runSIMPLE(opts)
         # transpose or not?
         p_corrector_mtx = reshape(p_corrector, Ny, Nx)
         #println("p_corrector_mtx")
-        #display(p_corrector_mtx)
+        display(p_corrector_mtx)
         #println("before")
         #display(u)
         #display(v)
@@ -286,6 +287,8 @@ function runSIMPLE(opts)
         #println("corrected v")
         #display(v)
         p += p_corrector
+        # some literature says to replace, not to add in
+        #p = p_corrector
         #plot_uvp(u, v, p, opts)
         #return
     end
@@ -294,7 +297,7 @@ function runSIMPLE(opts)
     # remember outermost boundaries are fictitious!
     display(u)
     display(v)
-    #display(p_corrector)
+    display(p)
     plot_uvp(u, v, p, opts)
     return
 end
@@ -305,7 +308,7 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 8
+N = 32
 Nx, Ny = N, N
 h = 1
 #h = 1/100
