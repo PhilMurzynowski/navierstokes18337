@@ -9,22 +9,15 @@ function set_vel_BC!(u, v, opts_BC)
     v_left = opts_BC["v_left"]
     v_right = opts_BC["v_right"]
 
-    # rest should be 0 if at BC
-    # may be able to remove
-    u[:, 1] .= 0
-    u[:, end] .= 0
-    v[1, :] .= 0
-    v[end, :] .= 0
-
-    u[1, :] .= u_bottom
-    u[end, :] .= u_top
+    u[1, :] .= u_top
+    u[end, :] .= u_bottom
     v[:, 1] .= v_left
     v[:, end] .= v_right
+    # rest should be 0 if at BC
 end
 
 #@inline function velocity_update!(u1, v1, u2, v2, p, opts)
-#function velocity_update(u1, v1, u2, v2, p, opts)
-function velocity_update(u1, v1, p, opts)
+function velocity_update(u1, v1, u2, v2, p, opts)
     # inlining because many of these functions will be reusing views
     # use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
     Δt = opts["dt"]
@@ -32,9 +25,6 @@ function velocity_update(u1, v1, p, opts)
     Δy = opts["dy"]
     μ = opts["mu"]
     ρ = opts["rho"]
-
-    u2 = deepcopy(u1)
-    v2 = deepcopy(v1)
 
     u1_c = @view u1[2:end-1, 2:end-1]
     u1_r = @view u1[2:end-1, 3:end]
@@ -85,14 +75,10 @@ function to assemble term describing pressure dependence on velocity
     output: v_dependence
         passed in for memory reuse
 """
-#function v2p(v_dependence, u, v, opts)
-function v2p(u, v, opts)
+function v2p(v_dependence, u, v, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
-    N = opts["N"]
-
-    v_dependence = zeros(N, N)
 
     #println("inside v2p")
     #println("u")
@@ -116,9 +102,6 @@ function v2p(u, v, opts)
     # perhaps can do common subexpression elemination
     # lengthy and in one line to try to get compiler to optimize subexpression
     #depend_inner = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
-
-
-
     v_dependence = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
                     - 1/(2*Δx)^2 * (u_r - u_l).^2
                     - 1/(2*Δy)^2 * (v_b - v_t).^2 
@@ -141,15 +124,10 @@ end
 #v2p(u, v, v_dependence, opts)
 #v_dependence
 
-#function poisson_solve(p1, p2, velocity_component, opts)
-    # use two arrays with swapping for memory reuse, p2 can initially be garbage
-    # currently creating tmp manually for debugging
-function poisson_solve(p, velocity_component, opts)
+function poisson_solve(p1, p2, velocity_component, opts)
     # currently using broadcast operations on matrices
     # iterating until convergence
-
-    # maybe copy is enough?
-    p1 = deepcopy(p)
+    # use two arrays with swapping for memory reuse, p2 can initially be garbage
     
     Δx = opts["dx"]
     Δy = opts["dy"]
@@ -160,31 +138,29 @@ function poisson_solve(p, velocity_component, opts)
     # simply run a number of iterations and ouput difference from last update
     # for analysis
     for i in 1:iter
-        # maybe copy is enough?
-        p1 = deepcopy(p)
-
         p1_r = @view p1[2:end-1, 3:end]
         p1_l = @view p1[2:end-1, 1:end-2]
         p1_b = @view p1[3:end, 2:end-1]
         p1_t = @view p1[1:end-2, 2:end-1]
 
+        
         # can compute prefix to its own constant if not done by compiler
-        p[2:end-1, 2:end-1] = (1.0/(2*(Δx^2 + Δy^2)) * ((Δx^2*(p1_t + p1_b)) + (Δy^2*(p1_r - p1_l)))
+        p2[2:end-1, 2:end-1] = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
                             - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
                             )
 
         # update BC
-        p[:, 1] = p[:, 2]
-        p[1, :] = p[2, :]
-        p[:, end] = p[:, end-1]
-        p[end, :] .= 0 # do this last to avoid overwriting
+        # p2[1, :] = p2[2, :] # pressure must remain 0 at the lid, BC
+        p2[1, :] .= 0
+        p2[end, :] = p2[end-1, :]
+        p2[:, 1] = p2[:, 2]
+        p2[:, end] = p2[:, end-1]
 
         # swap to reuse memory
-        #p1, p2 = p2, p1
+        p1, p2 = p2, p1
     end
 
-    #return maximum(abs.(p2 - p1)), p1
-    return maximum(abs.(p - p1)), p
+    return maximum(abs.(p2 - p1)), p1
     # desired answer will be in p1
 end
 
@@ -209,7 +185,7 @@ function plot_uvp(u, v, p, opts)
     # not sure if can use streamplot
     xs = 0.0:h:h*(N+1)
     ys = reverse(0.0:h:h*(N+1))
-    quiv = quiver(xs, ys, u', v', arrowsize = 0.01)
+    quiv = quiver(xs, ys, u', v', arrowsize = 0.1)
 
     # pressure
     # testing
@@ -241,44 +217,36 @@ function run_simulation(opts, BC_opts)
     sim_iter = opts["simulation_iter"]
     N = opts["N"]
 
-    u1_mtx, v1_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
-    #u2_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
-    #pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
-    pressure = zeros(N+2, N+2)
+    u1_mtx, u2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
+    v1_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
+    pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
     v_for_poisson = zeros(N, N)
 
-    #set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
-    #set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
+    set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+    set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
 
     for s in 1:sim_iter
-        #v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
-        v_for_poisson = v2p(u1_mtx, v1_mtx, opts)
+        v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
         #println("in sim loop")
         #println("v_dependence")
         #display(v_dependence)
-        #pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_for_poisson, opts)
-        pressure_eps, pressure = poisson_solve(pressure, v_for_poisson, opts)
-        println(pressure_eps) # debuggin
-        #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
-        #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure, opts)
-        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, pressure, opts)
-        set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+        pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_for_poisson, opts)
+        #println(pressure_eps) # debuggin
+        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
         #println("u1")
         #display(u1)
         #println("v1")
         #display(v1)
-        #if s == 4
-        #    #plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
-        #    plot_uvp(u1_mtx, v1_mtx, pressure, opts)
-        #    return
-        #end
+        if s == 4
+            plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
+            return
+        end
 
         #set_vel_BC(u1, v1, BC_opts)
         #set_vel_BC(u2, v2, BC_opts)
     end
     
-    #plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
-    plot_uvp(u1_mtx, v1_mtx, pressure, opts)
+    plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
     #display(pressure1)
     #display(u1)
     #display(v1)
@@ -291,13 +259,13 @@ end
 
 # can declare as constants
 
-N = 64
+N = 32
 h = 1/N
-dt = 0.0001
+dt = 0.01
 rho = 1.0
 mu = 0.15
-opts = Dict("poisson_iter"=>60,
-            "simulation_iter"=>500,
+opts = Dict("poisson_iter"=>40,
+            "simulation_iter"=>100,
             "N"=>N,
             "Nx"=>N,
             "Ny"=>N,
@@ -322,7 +290,7 @@ opts = Dict("poisson_iter"=>60,
             #"t0"=>0.0,
             #"T"=>0.3 # working for one timestep?
             )
-BC_opts = Dict("u_top"=>0.5,
+BC_opts = Dict("u_top"=>0.3,
                "u_bottom"=>0.0,
                "v_left"=>0.0,
                "v_right"=>0.0)
