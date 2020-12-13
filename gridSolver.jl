@@ -75,7 +75,7 @@ function to assemble term describing pressure dependence on velocity
     output: v_dependence
         passed in for memory reuse
 """
-function v2p!(v_dependence, u, v, opts)
+function v2p(v_dependence, u, v, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
@@ -113,41 +113,9 @@ function v2p!(v_dependence, u, v, opts)
     #depend_inner -= 1/(2*Δy)^2 * (v_b - v_t).^2
     #depend_inner -= (1/(2Δy)*(u_b - u_t)) .* (1/(2*Δx)*(v_r - v_l))
 
-    return
+    return v_dependence
 end
 
-# can declare as constants
-N = 32
-h = 1/N
-dt = 0.01
-rho = 1.0
-mu = 0.15
-opts = Dict("poisson_iter"=>40,
-            "simulation_iter"=>100,
-            "N"=>N,
-            "Nx"=>N,
-            "Ny"=>N,
-            "dx"=>h,
-            "dy"=>h,
-            #"dxi"=>dxi,
-            #"dyi"=>dyi,
-            "h"=>h,
-            #"hi"=>hi,
-            "dt"=>dt,
-            #"dti"=>dti,
-            "rho"=>rho,
-            "mu"=>mu,
-            #"rhoi"=>rhoi,
-            #"mu"=>mu,
-            #"Re"=>Re,
-            #"Rei"=>Rei,
-            #"imin"=>imin,
-            #"jmin"=>jmin,
-            #"imax"=>imax,
-            #"jmax"=>jmax,
-            #"t0"=>0.0,
-            #"T"=>0.3 # working for one timestep?
-            )
 
 # test of v2p
 #u = ones(N, N)*3
@@ -175,8 +143,8 @@ function poisson_solve(p1, p2, velocity_component, opts)
         p1_b = @view p1[3:end, 2:end-1]
         p1_t = @view p1[1:end-2, 2:end-1]
 
+        
         # can compute prefix to its own constant if not done by compiler
-        #p2 -= ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*vc_inner
         p2[2:end-1, 2:end-1] = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
                             - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
                             )
@@ -227,8 +195,8 @@ function plot_uvp(u, v, p, opts)
     #p[3] = 3
     #p[65] = 4
     # transpose and flip when plotting cause heatmap is weird
-    #println("pressure")
-    #display(pressure)
+    println("pressure inside plot_uvp")
+    display(p)
     p_xs = 0.0:h:h*(N-1)
     p_ys = 0.0:h:h*(N-1)
     hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(p', dims=2))
@@ -242,11 +210,6 @@ function plot_uvp(u, v, p, opts)
     return
 end
 
-BC_opts = Dict("u_top"=>0.3,
-               "u_bottom"=>0.0,
-               "v_left"=>0.0,
-               "v_right"=>0.0)
-
 # full test
 
 function run_simulation(opts, BC_opts)
@@ -254,25 +217,28 @@ function run_simulation(opts, BC_opts)
     sim_iter = opts["simulation_iter"]
     N = opts["N"]
 
-    u1, u2 = zeros(N+2, N+2), zeros(N+2, N+2)
-    v1, v2 = zeros(N+2, N+2), zeros(N+2, N+2)
+    u1_mtx, u2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
+    v1_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
     pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
-    v_dependence = zeros(N, N)
+    v_for_poisson = zeros(N, N)
 
-    set_vel_BC!(u1, v1, BC_opts)
-    set_vel_BC!(u2, v2, BC_opts)
+    set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+    set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
 
     for s in 1:sim_iter
-        v2p!(v_dependence, u1, v1, opts)
-        pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_dependence, opts)
-        println(pressure_eps) # debuggin
-        u1, v1 = velocity_update(u1, v1, u2, v2, pressure1, opts)
-        println("in sim loop")
-        println("u1")
-        display(u1)
-        println("v1")
-        display(v1)
-        if s == 2
+        v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
+        #println("in sim loop")
+        #println("v_dependence")
+        #display(v_dependence)
+        pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_for_poisson, opts)
+        #println(pressure_eps) # debuggin
+        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
+        #println("u1")
+        #display(u1)
+        #println("v1")
+        #display(v1)
+        if s == 4
+            plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
             return
         end
 
@@ -280,7 +246,7 @@ function run_simulation(opts, BC_opts)
         #set_vel_BC(u2, v2, BC_opts)
     end
     
-    plot_uvp(u1, v1, pressure1, opts)
+    plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
     #display(pressure1)
     #display(u1)
     #display(v1)
@@ -290,5 +256,44 @@ function run_simulation(opts, BC_opts)
     #display(v2)
 
 end
+
+# can declare as constants
+
+N = 32
+h = 1/N
+dt = 0.01
+rho = 1.0
+mu = 0.15
+opts = Dict("poisson_iter"=>40,
+            "simulation_iter"=>100,
+            "N"=>N,
+            "Nx"=>N,
+            "Ny"=>N,
+            "dx"=>h,
+            "dy"=>h,
+            #"dxi"=>dxi,
+            #"dyi"=>dyi,
+            "h"=>h,
+            #"hi"=>hi,
+            "dt"=>dt,
+            #"dti"=>dti,
+            "rho"=>rho,
+            "mu"=>mu,
+            #"rhoi"=>rhoi,
+            #"mu"=>mu,
+            #"Re"=>Re,
+            #"Rei"=>Rei,
+            #"imin"=>imin,
+            #"jmin"=>jmin,
+            #"imax"=>imax,
+            #"jmax"=>jmax,
+            #"t0"=>0.0,
+            #"T"=>0.3 # working for one timestep?
+            )
+BC_opts = Dict("u_top"=>0.3,
+               "u_bottom"=>0.0,
+               "v_left"=>0.0,
+               "v_right"=>0.0)
+
 
 run_simulation(opts, BC_opts)
