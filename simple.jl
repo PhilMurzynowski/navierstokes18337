@@ -117,8 +117,9 @@ function poissonRSIMPLE(u, v, R, opts)
     dyi = opts["dyi"]
 
     k = 1
-    for j in jmin:jmax
-        for i in imin:imax
+    # j must be inner loop if using column major order
+    for i in imin:imax
+        for j in jmin:jmax
             #R[k] = -rho*dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
             # different papers disagree on whether negated or not
             R[k] = -dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
@@ -176,11 +177,12 @@ function plot_uvp(u, v, p, opts)
     quiv = quiver(xs, ys, u', v', arrowsize = 0.1)
 
     # pressure
-    p .= 0
-    p[1] = 1
-    p[2] = 2
-    p[3] = 3
-    p[65] = 4
+    # testing
+    #p .= 0
+    #p[1] = 1
+    #p[2] = 2
+    #p[3] = 3
+    #p[65] = 4
     # transpose when reshaping here??
     # might need pressure reshaped into row major because formed laplacian that way
     pressure = reshape(p, N, N)'
@@ -242,7 +244,7 @@ function runSIMPLE(opts)
 
     # Velocity BC
     # velocity BC for lid driven flow problem
-    vel_BC = Dict("u_top"=>0.2,
+    vel_BC = Dict("u_top"=>0.5,
                   "u_bottom"=>0.0,
                   "v_left"=>0.0,
                   "v_right"=>0.0)
@@ -269,7 +271,7 @@ function runSIMPLE(opts)
         # view and reshape here for readability
         # is this reshaping in an unexpected manner?
         # transpose or not?
-        p_corrector_mtx = reshape(p_corrector, Ny, Nx)'
+        p_corrector_mtx = reshape(p_corrector, Ny, Nx)
         #println("p_corrector_mtx")
         #display(p_corrector_mtx)
         #println("before")
@@ -303,7 +305,7 @@ end
 # number of cells in one axis
 # Note: currenlty assuming symmetric, Nx = Ny
 # If using Nx and Ny instead of N, it is largely for readability / clarity
-N = 32
+N = 8
 Nx, Ny = N, N
 h = 1
 #h = 1/100
@@ -344,7 +346,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>11.0 # working for one timestep?
+            "T"=>20.0 # working for one timestep?
             )
 
 
