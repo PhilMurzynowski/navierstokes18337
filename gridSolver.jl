@@ -156,7 +156,7 @@ opts = Dict("poisson_iter"=>40,
 #v2p(u, v, v_dependence, opts)
 #v_dependence
 
-function poisson_solve!(p1, p2, velocity_component, opts)
+function poisson_solve(p1, p2, velocity_component, opts)
     # currently using broadcast operations on matrices
     # iterating until convergence
     # use two arrays with swapping for memory reuse, p2 can initially be garbage
@@ -175,13 +175,11 @@ function poisson_solve!(p1, p2, velocity_component, opts)
         p1_b = @view p1[3:end, 2:end-1]
         p1_t = @view p1[1:end-2, 2:end-1]
 
-        p2_c = @view p2[2:end-1, 2:end-1]
-
         # can compute prefix to its own constant if not done by compiler
         #p2 -= ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*vc_inner
-        p2_c = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
-                   - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
-                   )
+        p2[2:end-1, 2:end-1] = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
+                            - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
+                            )
 
         # update BC
         # p2[1, :] = p2[2, :] # pressure must remain 0 at the lid, BC
@@ -194,7 +192,7 @@ function poisson_solve!(p1, p2, velocity_component, opts)
         p1, p2 = p2, p1
     end
 
-    return maximum(p2 - p1)
+    return maximum(abs.(p2 - p1)), p1
     # desired answer will be in p1
 end
 
@@ -266,13 +264,17 @@ function run_simulation(opts, BC_opts)
 
     for s in 1:sim_iter
         v2p!(v_dependence, u1, v1, opts)
-        pressure_eps = poisson_solve!(pressure1, pressure2, v_dependence, opts)
+        pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_dependence, opts)
         println(pressure_eps) # debuggin
         u1, v1 = velocity_update(u1, v1, u2, v2, pressure1, opts)
         println("in sim loop")
         println("u1")
         display(u1)
-        #return
+        println("v1")
+        display(v1)
+        if s == 2
+            return
+        end
 
         #set_vel_BC(u1, v1, BC_opts)
         #set_vel_BC(u2, v2, BC_opts)
