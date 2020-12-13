@@ -1,3 +1,66 @@
+using Kronecker
+using LinearAlgebra
+using Makie, AbstractPlotting
+using AbstractPlotting: Node, hbox, vbox, heatmap
+
+function set_vel_BC(u, v, opts_BC)
+    u_top = opts_BC["u_top"]
+    u_bottom = opts_BC["u_bottom"]
+    v_left = opts_BC["v_left"]
+    v_right = opts_BC["v_right"]
+
+    u[1, :] .= u_top
+    u[end, :] .= u_bottom
+    v[:, 1] .= v_left
+    v[:, end] .= v_right
+    # rest should be 0 if at BC
+end
+
+@inline function velocity_update(u1, v1, u2, v2, p, opts)
+    # inlining because many of these functions will be reusing views
+    # use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
+    Δt = opts["dt"]
+    Δx = opts["dx"]
+    Δy = opts["dy"]
+    μ = opts["mu"]
+    ρ = opts["rho"]
+
+    u1_c = @view u1[2:end-1, 2:end-1]
+    u1_r = @view u1[2:end-1, 3:end]
+    u1_l = @view u1[2:end-1, 1:end-2]
+    u1_b = @view u1[3:end, 2:end-1]
+    u1_t = @view u1[1:end-2, 2:end-1]
+    u2_c = @view u2[2:end-1, 2:end-1]
+
+    v1_c = @view v1[2:end-1, 2:end-1]
+    v1_r = @view v1[2:end-1, 3:end]
+    v1_l = @view v1[2:end-1, 1:end-2]
+    v1_b = @view v1[3:end, 2:end-1]
+    v1_t = @view v1[1:end-2, 2:end-1]
+    v2_c = @view v2[2:end-1, 2:end-1]
+
+    p_r = @view p[2:end-1, 3:end]
+    p_l = @view p[2:end-1, 1:end-2]
+    p_b = @view p[3:end, 2:end-1]
+    p_t = @view p[1:end-2, 2:end-1]
+
+    u2_c = (u1_c +
+        Δt*(-1/Δx*u1_c*(u1_c - u1_l)
+            -1/Δy*v1_c*(u1_c - u1_t)
+            -1/(2*ρ*Δx)*(p_r - p_l)
+            +μ/Δx^2*(u1_r - 2*u1_c + u1_l)
+            +μ/Δy^2*(u1_b - 2*u1_c + u1_t)
+            ))
+
+    v2_c = (v1_c +
+        Δt*(-1/Δy*v1_c*(v1_c - v1_t)
+            -1/Δx*u1_c*(v1_c - v1_l)
+            -1/(2*ρ*Δy)*(p_b - p_t)
+            +μ/Δx^2*(v1_r - 2*v1_c + v1_l)
+            +μ/Δy^2*(v1_b - 2*v1_c + v1_t)
+            ))
+
+end
 
 """
 function to assemble term describing pressure dependence on velocity
@@ -21,10 +84,11 @@ function v2p(u, v, v_dependence, opts)
     v_b = @view v[3:end, 2:end-1]
     v_t = @view v[1:end-2, 2:end-1]
 
-    depend_inner = @view v_dependence[2:end-1, 2:end-1]
+    #depend_inner = @view v_dependence[2:end-1, 2:end-1]
     # perhaps can do common subexpression elemination
     # lengthy and in one line to try to get compiler to optimize subexpression
-    depend_inner = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
+    #depend_inner = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
+    v_dependence = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
                     - 1/(2*Δx)^2 * (u_r - u_l).^2
                     - 1/(2*Δy)^2 * (v_b - v_t).^2 
                     - 1/(2*Δy)^2 * (v_b - v_t).^2
@@ -37,11 +101,14 @@ function v2p(u, v, v_dependence, opts)
 end
 
 # can declare as constants
-N = 7
-h = 1.0
-dt = 1.0
+N = 32
+h = 1/N
+dt = 0.01
 rho = 1.0
-opts = Dict("N"=>N,
+mu = 0.15
+opts = Dict("poisson_iter"=>100,
+            "simulation_iter"=>100,
+            "N"=>N,
             "Nx"=>N,
             "Ny"=>N,
             "dx"=>h,
@@ -53,6 +120,7 @@ opts = Dict("N"=>N,
             "dt"=>dt,
             #"dti"=>dti,
             "rho"=>rho,
+            "mu"=>mu,
             #"rhoi"=>rhoi,
             #"mu"=>mu,
             #"Re"=>Re,
@@ -72,19 +140,121 @@ opts = Dict("N"=>N,
 #v2p(u, v, v_dependence, opts)
 #v_dependence
 
-function poisson_solve(p1, p2, opts)
+function poisson_solve(p1, p2, velocity_component, opts)
     # currently using broadcast operations on matrices
     # iterating until convergence
-    # use two arrays with swapping for memory reuse
+    # use two arrays with swapping for memory reuse, p2 can initially be garbage
+    
+    Δx = opts["dx"]
+    Δy = opts["dy"]
+    ρ = opts["rho"]
+    iter = opts["poisson_iter"]
 
-    p1_r = @p1iew p1[2:end-1, 3:end]
-    p1_l = @p1iew p1[2:end-1, 1:end-2]
-    p1_b = @p1iew p1[3:end, 2:end-1]
-    p1_t = @p1iew p1[1:end-2, 2:end-1]
+    # instead of using a while loop and comparing size of update in matrix,
+    # simply run a number of iterations and ouput difference from last update
+    # for analysis
+    for i in 1:iter
+        p1_r = @view p1[2:end-1, 3:end]
+        p1_l = @view p1[2:end-1, 1:end-2]
+        p1_b = @view p1[3:end, 2:end-1]
+        p1_t = @view p1[1:end-2, 2:end-1]
 
-    p2 = (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
+        p2_inner = @view p2[2:end-1, 2:end-1]
 
+        # can compute prefix to its own constant if not done by compiler
+        #p2 -= ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*vc_inner
+        p2_inner = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
+                   - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
+                   )
 
-    # return number of iterations for analysis
-    return iter
+        # update BC
+        p2[1, :] = p2[2, :]
+        p2[end, :] = p2[end-1, :]
+        p2[:, 1] = p2[:, 2]
+        p2[:, end] = p2[:, end-1]
+
+        # swap to reuse memory
+        p1, p2 = p2, p1
+    end
+
+    return maximum(p2 - p1)
+    # desired answer will be in p1
 end
+
+# test of poisson_solve
+#u = ones(N, N)*3
+#v = ones(N, N)*2
+#v_dependence = zeros(N, N)
+#v2p(u, v, v_dependence, opts)
+#pressure1 = zeros(N+2, N+2)
+#pressure2 = zeros(N+2, N+2)
+#pressure_eps = poisson_solve(pressure1, pressure2, v_dependence, opts)
+
+function plot_uvp(u, v, p, opts)
+    h = opts["h"]
+    N = opts["N"]
+   
+    # have to do some transposing and reversing here for formatting
+    # reverse ys because jmin is near top, while origin is bottom left
+    #display(u)
+    #display(v)
+    # using quiver
+    # not sure if can use streamplot
+    xs = 0.0:h:h*(N+1)
+    ys = reverse(0.0:h:h*(N+1))
+    quiv = quiver(xs, ys, u', v', arrowsize = 0.1)
+
+    # pressure
+    # testing
+    #p .= 0
+    #p[1] = 1
+    #p[2] = 2
+    #p[3] = 3
+    #p[65] = 4
+    # transpose and flip when plotting cause heatmap is weird
+    pressure = reshape(p, N, N)
+    #println("pressure")
+    #display(pressure)
+    p_xs = 0.0:h:h*(N-1)
+    p_ys = 0.0:h:h*(N-1)
+    hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(pressure', dims=2))
+    cl = colorlegend(hm[end], raw = true, camera = campixel!)
+
+    parent = Scene(resolution= (1000, 500))
+    full_scene = vbox(vbox(hm, cl), quiv, parent=parent)
+    display(full_scene)
+
+    #test
+    return
+end
+
+BC_opts = Dict("u_top"=>0.3,
+               "u_bottom"=>0.0,
+               "v_left"=>0.0,
+               "v_right"=>0.0)
+
+# full test
+
+function run_simulation(opts, BC_opts)
+    
+    sim_iter = opts["simulation_iter"]
+
+    u1, u2 = zeros(N+2, N+2), zeros(N+2, N+2)
+    v1, v2 = zeros(N+2, N+2), zeros(N+2, N+2)
+    pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
+    v_dependence = zeros(N, N)
+
+    set_vel_BC(u1, v1, BC_opts)
+
+    for s in 1:sim_iter
+        v2p(u1, v1, v_dependence, opts)
+        pressure_eps = poisson_solve(pressure1, pressure2, v_dependence, opts)
+        println(pressure_eps) # debuggin
+        velocity_update(u1, v1, u2, v2, pressure1, opts)
+    end
+    
+    plot_uvp(u1, v1, pressure1, opts)
+
+end
+
+run_simulation(opts, BC_opts)
