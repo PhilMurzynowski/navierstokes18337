@@ -40,14 +40,18 @@ function predictVelSIMPLE(u, v, p_matrix, u_new, v_new, opts)
     for i in imin+1:imax
         for j in jmin:jmax
             # linearly interpolate
-            v_interpolated = 1/4*(v[j, i] + v[j, i+1] + v[j-1, i] + v[j-1, i+1])
+            #v_interpolated = 1/4*(v[j, i] + v[j, i+1] + v[j-1, i] + v[j-1, i+1])
+            v_interpolated = 0.25 * ( v[j, i-1] + v[j+1, i-1] + v[j, i] + v[j+1, i])
             # group together in stages for readability
             a3 = (u[j, i+1] - 2*u[j, i] + u[j, i-1]) / Δx^2
             a4 = (u[j+1, i] - 2*u[j, i] + u[j-1, i]) / Δy^2
             # calculations using interpolated velocites
-            a1 = -(u[j, i+1]^2 - u[j, i-1]^2)/(2*Δx) - v_interpolated*(u[j+1, i] - u[j-1, i])/(2*Δy)
+            #a1 = -(u[j, i+1]^2 - u[j, i-1]^2)/(2*Δx) - v_interpolated*(u[j+1, i] - u[j-1, i])/(2*Δy)
+            # try not squaring u, may have problems with BC?
+            a1 = -(u[j, i])*(u[j, i+1] - u[j, i-1])/(2*Δx) - v_interpolated*(u[j+1, i] - u[j-1, i])/(2*Δy)
             # may be off by a sign here, a1, check
-            A = -a1 + Re_inv*(a3 + a4)
+            # checked, looks fine
+            A = a1 + Re_inv*(a3 + a4)
             # u^{n+1}
             #                                   edited indices here
             # p_matrix subtracts, j-1, i-1, as of different size, N x N
@@ -57,14 +61,18 @@ function predictVelSIMPLE(u, v, p_matrix, u_new, v_new, opts)
     for i in imin:imax
         for j in jmin+1:jmax
             # linearly interpolate
-            u_interpolated = 1/4*(u[j, i] + u[j, i-1] + u[j+1, i] + u[j+1, i-1])
+            #u_interpolated = 1/4*(u[j, i] + u[j, i-1] + u[j+1, i] + u[j+1, i-1])
+            u_interpolated = 1/4*(u[j, i+1] + u[j, i] + u[j-1, i+1] + u[j-1, i])
             # group together in stages for readability
             b3 = (v[j+1, i] - 2*v[j, i] + v[j-1, i]) / Δy^2
             b4 = (v[j, i+1] - 2*v[j, i] + v[j, i-1]) / Δx^2
             # calculations using interpolated velocites
-            b1 = -(v[j+1, i]^2 - v[j-1, i]^2)/(2*Δy) - u_interpolated*(v[j, i+1] - v[j, i-1])/(2*Δx)
+            # try not squaring v? BC problems with fictitious velocity?
+            #b1 = -(v[j+1, i]^2 - v[j-1, i]^2)/(2*Δy) - u_interpolated*(v[j, i+1] - v[j, i-1])/(2*Δx)
+            b1 = -v[j, i]*(v[j+1, i] - v[j-1, i])/(2*Δy) - u_interpolated*(v[j, i+1] - v[j, i-1])/(2*Δx)
             # may be off by a sign here, b1, check
-            B = -b1 + Re_inv*(b3 + b4)
+            # checked, I think postive b1 is actually correct
+            B = b1 + Re_inv*(b3 + b4)
             # v^{n+1}
             #                                   edited indices here
             # p_matrix subtracts, j-1, i-1, as of different size, N x N
@@ -112,7 +120,11 @@ function poissonRSIMPLE(u, v, R, opts)
     for j in jmin:jmax
         for i in imin:imax
             #R[k] = -rho*dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
+            # different papers disagree on whether negated or not
             R[k] = -dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
+            #R[k] = dti*((u[j, i+1] - u[j, i])*dxi + (v[j+1, i] - v[j, i])*dyi)
+            # switched indices
+            # R[k] = -dti*((u[j, i] - u[j, i-1])*dxi + (v[j, i] - v[j-1, i])*dyi)
             k += 1
         end
     end
@@ -164,9 +176,18 @@ function plot_uvp(u, v, p, opts)
     quiv = quiver(xs, ys, u', v', arrowsize = 0.1)
 
     # pressure
-    pressure = reshape(p, N, N)
+    p .= 0
+    p[1] = 1
+    p[2] = 2
+    p[3] = 3
+    p[65] = 4
+    # transpose when reshaping here??
+    # might need pressure reshaped into row major because formed laplacian that way
+    pressure = reshape(p, N, N)'
+    display(pressure)
     xs = 0.0:h:h*(N-1)
-    ys = reverse(0.0:h:h*(N-1))
+    ys = 0.0:h:h*(N-1)
+    #ys = reverse(0.0:h:h*(N-1))
     hm = heatmap(xs, ys, pressure)
     cl = colorlegend(hm[end], raw = true, camera = campixel!)
 
@@ -245,17 +266,25 @@ function runSIMPLE(opts)
         #display(R)
         # debugging
         p_corrector = pressureSolveSIMPLE(P, R, opts)
-        #println("p_corrector")
-        #display(p_corrector)
         # view and reshape here for readability
-        p_corrector_mtx = @view p_corrector[:, :]
-        p_corrector_mtx = reshape(p_corrector_mtx, Ny, Nx)
+        # is this reshaping in an unexpected manner?
+        # transpose or not?
+        p_corrector_mtx = reshape(p_corrector, Ny, Nx)'
+        #println("p_corrector_mtx")
+        #display(p_corrector_mtx)
+        #println("before")
+        #display(u)
+        #display(v)
         velCorSIMPLE(u, v, p_corrector_mtx, opts)
+        #println("after")
+        #display(u)
+        #display(v)
         #println("corrected u")
         #display(u)
         #println("corrected v")
         #display(v)
         p += p_corrector
+        #plot_uvp(u, v, p, opts)
         #return
     end
 
@@ -315,7 +344,7 @@ opts = Dict("N"=>N,
             "imax"=>imax,
             "jmax"=>jmax,
             "t0"=>0.0,
-            "T"=>9.0 # working for one timestep?
+            "T"=>11.0 # working for one timestep?
             )
 
 
