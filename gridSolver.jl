@@ -9,6 +9,11 @@ function set_vel_BC!(u, v, opts_BC)
     v_left = opts_BC["v_left"]
     v_right = opts_BC["v_right"]
 
+    # creating copies for debuggin
+    #u_new = deepcopy(u)
+    #v_new = deepcopy(v)
+
+
     # rest should be 0 if at BC
     # may be able to remove
     u[:, 1] .= 0
@@ -16,10 +21,14 @@ function set_vel_BC!(u, v, opts_BC)
     v[1, :] .= 0
     v[end, :] .= 0
 
+    #println("u_top")
+    #println(u_top)
     u[1, :] .= u_bottom
     u[end, :] .= u_top
     v[:, 1] .= v_left
     v[:, end] .= v_right
+
+    return
 end
 
 #@inline function velocity_update!(u1, v1, u2, v2, p, opts)
@@ -54,19 +63,19 @@ function velocity_update(u1, v1, p, opts)
     p_t = @view p[1:end-2, 2:end-1]
 
     u2[2:end-1, 2:end-1] = (u1_c +
-                        Δt*(-1/Δx*u1_c*(u1_c - u1_l)
-                            -1/Δy*v1_c*(u1_c - u1_t)
-                            -1/(2*ρ*Δx)*(p_r - p_l)
-                            +μ/Δx^2*(u1_r - 2*u1_c + u1_l)
-                            +μ/Δy^2*(u1_b - 2*u1_c + u1_t)
+                        Δt*(-1/Δx*u1_c.*(u1_c - u1_l)
+                            - 1/Δy*v1_c.*(u1_c - u1_t)
+                            - 1/(2*ρ*Δx)*(p_r - p_l)
+                            + μ/Δx^2*(u1_r - 2*u1_c + u1_l)
+                            + μ/Δy^2*(u1_b - 2*u1_c + u1_t)
                             ))
 
     v2[2:end-1, 2:end-1] = (v1_c +
-                        Δt*(-1/Δy*v1_c*(v1_c - v1_t)
-                            -1/Δx*u1_c*(v1_c - v1_l)
-                            -1/(2*ρ*Δy)*(p_b - p_t)
-                            +μ/Δx^2*(v1_r - 2*v1_c + v1_l)
-                            +μ/Δy^2*(v1_b - 2*v1_c + v1_t)
+                        Δt*(-1/Δy*v1_c.*(v1_c - v1_t)
+                            - 1/Δx*u1_c.*(v1_c - v1_l)
+                            - 1/(2*ρ*Δy)*(p_b - p_t)
+                            + μ/Δx^2*(v1_r - 2*v1_c + v1_l)
+                            + μ/Δy^2*(v1_b - 2*v1_c + v1_t)
                             ))
 
     #println("end of velocity update")
@@ -130,6 +139,7 @@ function v2p(u, v, opts)
     #depend_inner -= 1/(2*Δy)^2 * (v_b - v_t).^2
     #depend_inner -= (1/(2Δy)*(u_b - u_t)) .* (1/(2*Δx)*(v_r - v_l))
 
+
     return v_dependence
 end
 
@@ -170,7 +180,7 @@ function poisson_solve(p, velocity_component, opts)
 
         # can compute prefix to its own constant if not done by compiler
         p[2:end-1, 2:end-1] = (1.0/(2*(Δx^2 + Δy^2)) * ((Δx^2*(p1_t + p1_b)) + (Δy^2*(p1_r - p1_l)))
-                            - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
+                            - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2)).*velocity_component
                             )
 
         # update BC
@@ -207,9 +217,14 @@ function plot_uvp(u, v, p, opts)
     #display(v)
     # using quiver
     # not sure if can use streamplot
-    xs = 0.0:h:h*(N+1)
+    # figure out formatting to get right side up
+    xs = reverse(0.0:h:h*(N+1))
     ys = reverse(0.0:h:h*(N+1))
     quiv = quiver(xs, ys, u', v', arrowsize = 0.01)
+    println("u inside plot_uvp")
+    display(u)
+    println("v inside plot_uvp")
+    display(v)
 
     # pressure
     # testing
@@ -247,8 +262,7 @@ function run_simulation(opts, BC_opts)
     pressure = zeros(N+2, N+2)
     v_for_poisson = zeros(N, N)
 
-    #set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
-    #set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
+    set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
 
     for s in 1:sim_iter
         #v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
@@ -262,7 +276,7 @@ function run_simulation(opts, BC_opts)
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure, opts)
         u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, pressure, opts)
-        set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+        #set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
         #println("u1")
         #display(u1)
         #println("v1")
@@ -291,12 +305,12 @@ end
 
 # can declare as constants
 
-N = 64
-h = 1/N
-dt = 0.0001
-rho = 1.0
+N = 32
+h = 3/N # chose this spacing largely for visuals
+dt = 0.001
+rho = 10.0
 mu = 0.15
-opts = Dict("poisson_iter"=>60,
+opts = Dict("poisson_iter"=>50,
             "simulation_iter"=>500,
             "N"=>N,
             "Nx"=>N,
@@ -322,7 +336,7 @@ opts = Dict("poisson_iter"=>60,
             #"t0"=>0.0,
             #"T"=>0.3 # working for one timestep?
             )
-BC_opts = Dict("u_top"=>0.5,
+BC_opts = Dict("u_top"=>1.0,
                "u_bottom"=>0.0,
                "v_left"=>0.0,
                "v_right"=>0.0)
