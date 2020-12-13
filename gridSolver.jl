@@ -17,7 +17,7 @@ function set_vel_BC!(u, v, opts_BC)
 end
 
 #@inline function velocity_update!(u1, v1, u2, v2, p, opts)
-function velocity_update!(u1, v1, u2, v2, p, opts)
+function velocity_update(u1, v1, u2, v2, p, opts)
     # inlining because many of these functions will be reusing views
     # use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
     Δt = opts["dt"]
@@ -31,36 +31,39 @@ function velocity_update!(u1, v1, u2, v2, p, opts)
     u1_l = @view u1[2:end-1, 1:end-2]
     u1_b = @view u1[3:end, 2:end-1]
     u1_t = @view u1[1:end-2, 2:end-1]
-    u2_c = @view u2[2:end-1, 2:end-1]
 
     v1_c = @view v1[2:end-1, 2:end-1]
     v1_r = @view v1[2:end-1, 3:end]
     v1_l = @view v1[2:end-1, 1:end-2]
     v1_b = @view v1[3:end, 2:end-1]
     v1_t = @view v1[1:end-2, 2:end-1]
-    v2_c = @view v2[2:end-1, 2:end-1]
 
     p_r = @view p[2:end-1, 3:end]
     p_l = @view p[2:end-1, 1:end-2]
     p_b = @view p[3:end, 2:end-1]
     p_t = @view p[1:end-2, 2:end-1]
 
-    u2_c = (u1_c +
-        Δt*(-1/Δx*u1_c*(u1_c - u1_l)
-            -1/Δy*v1_c*(u1_c - u1_t)
-            -1/(2*ρ*Δx)*(p_r - p_l)
-            +μ/Δx^2*(u1_r - 2*u1_c + u1_l)
-            +μ/Δy^2*(u1_b - 2*u1_c + u1_t)
-            ))
+    u2[2:end-1, 2:end-1] = (u1_c +
+                        Δt*(-1/Δx*u1_c*(u1_c - u1_l)
+                            -1/Δy*v1_c*(u1_c - u1_t)
+                            -1/(2*ρ*Δx)*(p_r - p_l)
+                            +μ/Δx^2*(u1_r - 2*u1_c + u1_l)
+                            +μ/Δy^2*(u1_b - 2*u1_c + u1_t)
+                            ))
 
-    v2_c = (v1_c +
-        Δt*(-1/Δy*v1_c*(v1_c - v1_t)
-            -1/Δx*u1_c*(v1_c - v1_l)
-            -1/(2*ρ*Δy)*(p_b - p_t)
-            +μ/Δx^2*(v1_r - 2*v1_c + v1_l)
-            +μ/Δy^2*(v1_b - 2*v1_c + v1_t)
-            ))
+    v2[2:end-1, 2:end-1] = (v1_c +
+                        Δt*(-1/Δy*v1_c*(v1_c - v1_t)
+                            -1/Δx*u1_c*(v1_c - v1_l)
+                            -1/(2*ρ*Δy)*(p_b - p_t)
+                            +μ/Δx^2*(v1_r - 2*v1_c + v1_l)
+                            +μ/Δy^2*(v1_b - 2*v1_c + v1_t)
+                            ))
 
+    #println("end of velocity update")
+    #println("u2")
+    #display(u2)
+    #println("v2_c")
+    #display(v2_c)
     # swapping inside a function won't do anything
     #v1, v2 = v2, v1
     #u1, u2 = u2, u1
@@ -266,9 +269,9 @@ function run_simulation(opts, BC_opts)
         pressure_eps = poisson_solve!(pressure1, pressure2, v_dependence, opts)
         println(pressure_eps) # debuggin
         u1, v1 = velocity_update(u1, v1, u2, v2, pressure1, opts)
-        #println("in sim loop")
-        #println("u1")
-        #display(u1)
+        println("in sim loop")
+        println("u1")
+        display(u1)
         #return
 
         #set_vel_BC(u1, v1, BC_opts)
