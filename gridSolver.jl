@@ -3,7 +3,7 @@ using LinearAlgebra
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
 
-function set_vel_BC(u, v, opts_BC)
+function set_vel_BC!(u, v, opts_BC)
     u_top = opts_BC["u_top"]
     u_bottom = opts_BC["u_bottom"]
     v_left = opts_BC["v_left"]
@@ -16,7 +16,8 @@ function set_vel_BC(u, v, opts_BC)
     # rest should be 0 if at BC
 end
 
-@inline function velocity_update(u1, v1, u2, v2, p, opts)
+#@inline function velocity_update!(u1, v1, u2, v2, p, opts)
+function velocity_update!(u1, v1, u2, v2, p, opts)
     # inlining because many of these functions will be reusing views
     # use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
     Δt = opts["dt"]
@@ -60,6 +61,10 @@ end
             +μ/Δy^2*(v1_b - 2*v1_c + v1_t)
             ))
 
+    # swapping inside a function won't do anything
+    #v1, v2 = v2, v1
+    #u1, u2 = u2, u1
+    return u2, v2
 end
 
 """
@@ -67,10 +72,16 @@ function to assemble term describing pressure dependence on velocity
     output: v_dependence
         passed in for memory reuse
 """
-function v2p(u, v, v_dependence, opts)
+function v2p!(v_dependence, u, v, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
+
+    #println("inside v2p")
+    #println("u")
+    #display(u)
+    #println("v")
+    #display(v)
 
     # using views to attempt to minimize creating new arrays
     # using this indexing because have to be careful with BC, boundary conditions
@@ -92,12 +103,14 @@ function v2p(u, v, v_dependence, opts)
                     - 1/(2*Δx)^2 * (u_r - u_l).^2
                     - 1/(2*Δy)^2 * (v_b - v_t).^2 
                     - 1/(2*Δy)^2 * (v_b - v_t).^2
-                    - (1/(2Δy)*(u_b - u_t)) .* (1/(2*Δx)*(v_r - v_l))
+                    - (1/(Δy)*(u_b - u_t)) .* (1/(Δx)*(v_r - v_l)) * 1/2
                     )
     #depend_inner = 1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
     #depend_inner -= 1/(2*Δx)^2 * (u_r - u_l).^2
     #depend_inner -= 1/(2*Δy)^2 * (v_b - v_t).^2
     #depend_inner -= (1/(2Δy)*(u_b - u_t)) .* (1/(2*Δx)*(v_r - v_l))
+
+    return
 end
 
 # can declare as constants
@@ -106,7 +119,7 @@ h = 1/N
 dt = 0.01
 rho = 1.0
 mu = 0.15
-opts = Dict("poisson_iter"=>100,
+opts = Dict("poisson_iter"=>40,
             "simulation_iter"=>100,
             "N"=>N,
             "Nx"=>N,
@@ -129,8 +142,8 @@ opts = Dict("poisson_iter"=>100,
             #"jmin"=>jmin,
             #"imax"=>imax,
             #"jmax"=>jmax,
-            "t0"=>0.0,
-            "T"=>0.3 # working for one timestep?
+            #"t0"=>0.0,
+            #"T"=>0.3 # working for one timestep?
             )
 
 # test of v2p
@@ -140,7 +153,7 @@ opts = Dict("poisson_iter"=>100,
 #v2p(u, v, v_dependence, opts)
 #v_dependence
 
-function poisson_solve(p1, p2, velocity_component, opts)
+function poisson_solve!(p1, p2, velocity_component, opts)
     # currently using broadcast operations on matrices
     # iterating until convergence
     # use two arrays with swapping for memory reuse, p2 can initially be garbage
@@ -159,16 +172,17 @@ function poisson_solve(p1, p2, velocity_component, opts)
         p1_b = @view p1[3:end, 2:end-1]
         p1_t = @view p1[1:end-2, 2:end-1]
 
-        p2_inner = @view p2[2:end-1, 2:end-1]
+        p2_c = @view p2[2:end-1, 2:end-1]
 
         # can compute prefix to its own constant if not done by compiler
         #p2 -= ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*vc_inner
-        p2_inner = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
+        p2_c = (1/(2*(Δx^2 + Δy^2)) * (Δx^2*(p1_t + p1_b))+ (Δy^2*(p1_r - p1_l))
                    - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2))*velocity_component
                    )
 
         # update BC
-        p2[1, :] = p2[2, :]
+        # p2[1, :] = p2[2, :] # pressure must remain 0 at the lid, BC
+        p2[1, :] .= 0
         p2[end, :] = p2[end-1, :]
         p2[:, 1] = p2[:, 2]
         p2[:, end] = p2[:, end-1]
@@ -212,12 +226,11 @@ function plot_uvp(u, v, p, opts)
     #p[3] = 3
     #p[65] = 4
     # transpose and flip when plotting cause heatmap is weird
-    pressure = reshape(p, N, N)
     #println("pressure")
     #display(pressure)
     p_xs = 0.0:h:h*(N-1)
     p_ys = 0.0:h:h*(N-1)
-    hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(pressure', dims=2))
+    hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(p', dims=2))
     cl = colorlegend(hm[end], raw = true, camera = campixel!)
 
     parent = Scene(resolution= (1000, 500))
@@ -238,22 +251,38 @@ BC_opts = Dict("u_top"=>0.3,
 function run_simulation(opts, BC_opts)
     
     sim_iter = opts["simulation_iter"]
+    N = opts["N"]
 
     u1, u2 = zeros(N+2, N+2), zeros(N+2, N+2)
     v1, v2 = zeros(N+2, N+2), zeros(N+2, N+2)
     pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
     v_dependence = zeros(N, N)
 
-    set_vel_BC(u1, v1, BC_opts)
+    set_vel_BC!(u1, v1, BC_opts)
+    set_vel_BC!(u2, v2, BC_opts)
 
     for s in 1:sim_iter
-        v2p(u1, v1, v_dependence, opts)
-        pressure_eps = poisson_solve(pressure1, pressure2, v_dependence, opts)
+        v2p!(v_dependence, u1, v1, opts)
+        pressure_eps = poisson_solve!(pressure1, pressure2, v_dependence, opts)
         println(pressure_eps) # debuggin
-        velocity_update(u1, v1, u2, v2, pressure1, opts)
+        u1, v1 = velocity_update(u1, v1, u2, v2, pressure1, opts)
+        #println("in sim loop")
+        #println("u1")
+        #display(u1)
+        #return
+
+        #set_vel_BC(u1, v1, BC_opts)
+        #set_vel_BC(u2, v2, BC_opts)
     end
     
     plot_uvp(u1, v1, pressure1, opts)
+    #display(pressure1)
+    #display(u1)
+    #display(v1)
+    #println("dual")
+    #display(pressure2)
+    #display(u2)
+    #display(v2)
 
 end
 
