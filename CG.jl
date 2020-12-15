@@ -16,7 +16,8 @@ function CG_std(A, b, x_guess, ϵ)
     iter = 0
 
     # using l1 norm so don't have to square tiny ϵ
-    while sum(abs.(residual)) > ϵ
+    #while sum(abs.(residual)) > ϵ
+    while norm(residual, 1) > ϵ
         iter += 1
         # single matrix vector product optimization
         mvp = A*search_direction
@@ -47,7 +48,7 @@ function test_GC_std(A=nothing, b=nothing, ϵ=1e-9)
 
     x_direct = A \ b
     x_CG, num_iter = CG_std(A, b, vec(zeros(length(b))), ϵ)
-    @printf "number iterations: %d for epsilon: %f\n" num_iter ϵ
+    @printf "number iterations: %d for epsilon: %.16f\n" num_iter ϵ
     #display(x_direct)
     #display(x_direct)
     @assert isapprox(x_direct, x_CG, atol=ϵ)
