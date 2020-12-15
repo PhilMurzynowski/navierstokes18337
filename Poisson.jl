@@ -10,6 +10,7 @@ function genPoissonMtx(opts)
 
     N = opts["N"]
     hi = 1/opts["h"]
+    println("updated gen mtx")
 
     L = zeros(N, N)
     L[diagind(L, 0)] .= 2*hi^2
@@ -21,11 +22,11 @@ function genPoissonMtx(opts)
     P = (Id ⊗ L) + (L ⊗ Id)
     # Von Neumann BC and reference point modifications
     BC = zeros(N, N)
-    BC[1, 1] = -1
-    BC[N, N] = -1
+    BC[1, 1] = -hi^2
+    BC[N, N] = -hi^2
     P += (Id ⊗ BC)
-    P[1:N, 1:N] += -1*Id
-    P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -1*Id
+    P[1:N, 1:N] += -hi^2*Id
+    P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
     #P[1, :] .= 0
     #P[1, 1] = 1*hi^2
     #P[N^2, :] .= 0
@@ -97,3 +98,4 @@ full_scene = hbox(
                 parent=parent)
 println("bye")
 display(full_scene)
+display(P)
