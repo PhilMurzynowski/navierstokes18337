@@ -243,3 +243,28 @@ interact = vbox(
     hbox(s1, s2, s3, s4, s5, s6),
     mesh_scene, parent = parent
 )
+
+# broken
+using MakieLayout, AbstractPlotting, GLMakie
+GLMakie.activate!()
+outer_padding = 30
+scene, layout = layoutscene(outer_padding, 
+                        resolution=(1200, 700), 
+                        backgroundcolor=RGBf0(0.98,0.98,0.98))
+ax1 = layout[1, 1] = LAxis(scene, title="hello1")
+ax2 = layout[1, 2] = LAxis(scene, title="hello2")
+linkaxes!(ax1, ax2)
+hideydecorations!(ax2, grid=false)
+display(scene)
+
+#broken
+using MakieLayout, AbstractPlotting
+using Random
+outer_padding = 30
+scene, layout = layoutscene(outer_padding, resolution = (1200, 1000));
+image = rand(1:4, 64, 48);
+im = heatmap(image, scale_plot = false, show_axis = false, interpolate = false)
+layout[1, 1] = LAxis(im, title = "My Title")
+#tightlimits!.(ax1)
+#hidedecorations!.(ax1)
+display(scene)
