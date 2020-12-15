@@ -1,6 +1,7 @@
 using LinearAlgebra, Kronecker
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
+
 include("CG.jl")
 
 # methods dedicated to solving Poisson Eq

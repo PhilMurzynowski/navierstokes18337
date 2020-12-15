@@ -73,7 +73,7 @@ function CG_Poisson(b, p_guess, ϵ, opts)
         for j in 2:N+1
             j_inner = j - 1
             residual[j, i] = b[j_inner, i_inner] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
-            residual[j, i] -= 1/Δy^2*(p_guess[j+1, i] - 2*p_guess[j, i] + p_guess[j-1])
+            residual[j, i] -= 1/Δy^2*(p_guess[j+1, i] - 2*p_guess[j, i] + p_guess[j-1, i])
         end
     end
     # any bugs with copying here?
@@ -85,13 +85,13 @@ function CG_Poisson(b, p_guess, ϵ, opts)
     mvp = zeros(N+2, N+2) # init storage for matrix vector product
     
     # using l1 norm so don't have to square tiny ϵ
-    while norm(residual, 1) > ϵ && iter <= 100
+    while norm(residual, 1) > ϵ && iter <= 300
         iter += 1
         # single matrix vector product optimization
         for i in 2:N+1
             for j in 2:N+1
                 mvp[j, i] = 1/Δx^2*(search_direction[j, i+1] - 2*search_direction[j, i] + search_direction[j, i-1])
-                mvp[j, i] += 1/Δy^2*(search_direction[j+1, i] - 2*search_direction[j, i] + search_direction[j-1])
+                mvp[j, i] += 1/Δy^2*(search_direction[j+1, i] - 2*search_direction[j, i] + search_direction[j-1, i])
             end
         end
         # calculate step size
