@@ -39,8 +39,9 @@ function updateVorticity(ω, u, v, ω_next, opts)
 end
 
 # could this be fused to updateVoriticity for better cache use, repeating this question everywhere ha
-function updateVorticityWallBC(ω, u, v, ψ, opts, BC_opts)
+function updateVorticityWallBC(ω, ψ, opts, opts_BC)
     h = opts["h"]
+    N = opts["N"]
 
     u_top = opts_BC["u_top"]
     u_bottom = opts_BC["u_bottom"]
@@ -60,9 +61,11 @@ function updateVorticityWallBC(ω, u, v, ψ, opts, BC_opts)
     rn1 = @view ψ[N+1, :]
 
     ω[N+2, :] = 2/h^2 .* (rn - rn1) - 2*u_top/h
-    ω[1, :] = 2/h^2 .* (r3 - r2) - 2*u_bottom/h
-    w[i,1] = (-4.0*s[i,2]+0.5*s[i,3])/(dy*dy)
+    ω[1, :] = 2/h^2 .* (r3 - r2) + 2*u_bottom/h
 
+    ω[:, 1] = 2/h^2 .* (c3 - c2) - 2*v_left/h
+    ω[:, N+2] = 2/h^2 .* (cn - cn1) + 2*v_right/h
+    
 end
 
 # solve poisson with CG
