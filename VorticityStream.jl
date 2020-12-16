@@ -8,7 +8,6 @@ function genPoissonStreamMtx(size, opts)
 
     N = size
     hi = 1/opts["h"]
-    println("updated gen mtx")
 
     L = zeros(N, N)
     L[diagind(L, 0)] .= 2*hi^2
@@ -18,13 +17,12 @@ function genPoissonStreamMtx(size, opts)
     # cant use I with Kronecker, not working
     Id = 1*Matrix(I, N, N)
     P = (Id ⊗ L) + (L ⊗ Id)
-    # Von Neumann BC and reference point modifications
     BC = zeros(N, N)
-    BC[1, 1] = -hi^2
-    BC[N, N] = -hi^2
-    P += (Id ⊗ BC)
-    P[1:N, 1:N] += -hi^2*Id
-    P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
+    #BC[1, 1] = -hi^2
+    #BC[N, N] = -hi^2
+    #P += (Id ⊗ BC)
+    #P[1:N, 1:N] += -hi^2*Id
+    #P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
     #P[1, :] .= 0
     #P[1, 1] = 1*hi^2
     #P[N^2, :] .= 0
@@ -47,6 +45,7 @@ function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
 
     # boundary conditions are constant by problem specification
 
+    #=
     c2 = @view ψ[:, 3]
     c3 = @view ψ[:, 2]
     cn = @view ψ[:, N]
@@ -61,13 +60,29 @@ function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
     # or am I creating unnecessary temporary arrays
     # to specialize for lid driven cavity could also flip axes so
     #   that when updating top velocity only access a column
-
     ω[N+2, :] = 2/h^2 .* (rn - rn1) .- 2*u_top/h
     ω[1, :] = 2/h^2 .* (r3 - r2) .+ 2*u_bottom/h
 
     ω[:, 1] = 2/h^2 .* (c3 - c2) .- 2*v_left/h
     ω[:, N+2] = 2/h^2 .* (cn - cn1) .+ 2*v_right/h
-   
+    =#
+
+    # iterating very likely better than slicing here
+    # only have one term in BC as expecting other to be 0
+    # bottom top will have lots of cache misses
+    for i in 2:N-1
+        # top
+        # bottom
+        ω[N, i] = -2/h^2*ψ[N-1, i] - 2/h*u_top
+        ω[1, i] = -2/h^2*ψ[2, i] + 2/h*u_bottom
+    end
+    # left right
+    for j in 2:N-1
+        # left
+        # right
+        ω[j, 1] = -2/h^2*ψ[j, 2] + 2/h*v_left
+        ω[j, N] = -2/h^2*ψ[j, N-1] - 2/h*v_right
+    end
     return
 end
 
@@ -83,9 +98,9 @@ function updateVorticity(ω, ω_next, ψ, opts)
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
 
-    for i in 2:N+1
-        i_boundary = (i == 2 || i == N+1) ? true : false
-        for j in 2:N+1
+    for i in 2:N-1
+        #i_boundary = (i == 2 || i == N+1) ? true : false
+        for j in 2:N-1
             # higher indices currently correspond to top
             # u = dψ/dy
             u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i])
@@ -99,6 +114,9 @@ function updateVorticity(ω, ω_next, ψ, opts)
 
             # if on the boundary don't use second order upwind
             # could use sentinels instead of control flow but more memory
+
+            #= debugging, don't use 2nd order upwind at all for now
+
             if i_boundary || j == 2 || j == N + 1
                 continue
             else
@@ -114,6 +132,8 @@ function updateVorticity(ω, ω_next, ψ, opts)
                              - 1/2*v_ji*ωy
                              )
             end
+
+            =#
         end
     end
     return ω_next
@@ -129,13 +149,18 @@ end
 function runVorticityStream(opts, opts_BC)
     # init vorticity, streamfunction
     N = opts["N"]
-    ω = zeros(N+2, N+2)
-    ωtmp = zeros(N+2, N+2)
-    ψ = zeros(N+2, N+2)
-    P = genPoissonStreamMtx(N+2, opts)
-    ϵ = 1e-3
+    ω = zeros(N, N)
+    ωtmp = zeros(N, N)
+    ψ = zeros(N, N)
+    # thought about it, and generating mtx of size other than NxN doesn't make sense
+    # can remove param later
+    P = genPoissonStreamMtx(N, opts)
+    #println("P")
+    #display(P)
+    #return
+    ϵ = 1e-10
 
-    max_iter = 2
+    max_iter = 20
 
     for i in 1:max_iter
         println(i)
@@ -154,11 +179,16 @@ function runVorticityStream(opts, opts_BC)
         #poisson_RHS = ω_vec
         #ψ_inner = @view ψ[2:end-1, 2:end-1]
         #ψ_vec = vec(ψ_inner)
+
+        #=
         ψ_vec = reshape(ψ, length(ψ), 1)
         println("enter CG")
         ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
         #ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
-        ψ = reshape(ψ_vec, N+2, N+2)
+        =#
+        ψ_vec = P \ poisson_RHS
+        ψ = reshape(ψ_vec, N, N)
+
         println("leave CG")
     end
 
@@ -169,7 +199,7 @@ end
 
 N = 10
 h = 1/N
-dt = 0.001
+dt = 0.0001
 BC_opts = Dict("u_top"=>1.0,
                "u_bottom"=>0.0,
                "v_left"=>0.0,
@@ -181,6 +211,6 @@ opts = Dict("N"=>N,
             "dy"=>h,
             "h"=>h,
             "dt"=>dt,
-            "Re"=>150
+            "Re"=>150.0
             )
 runVorticityStream(opts, BC_opts)
