@@ -6,7 +6,7 @@ using LinearAlgebra, Printf
 # matrix A must be constructed and passed in
 # warning do not use tolerance very close to machine error
 #   as this funciton does not specially account for roundoff error
-function CG_std(A, b, x_guess, ϵ)
+function CG_std(A, b, x_guess, ϵ, max_iter=1e3)
 
     residual = b - A*x_guess
     search_direction = residual     # use residuals as conjugate search directions
@@ -17,7 +17,8 @@ function CG_std(A, b, x_guess, ϵ)
 
     # using l1 norm so don't have to square tiny ϵ
     #while sum(abs.(residual)) > ϵ
-    while norm(residual, 1) > ϵ
+    while norm(residual, 1) > ϵ && iter < max_iter
+        println(iter)
         iter += 1
         # single matrix vector product optimization
         mvp = A*search_direction
@@ -60,7 +61,7 @@ end
 # everything is kept in matrix form for easier indexing
 # pressure matrix is (N+2, N+2) for BC
 # loops are ordered to account for column-major ordering
-function CG_Poisson(b, p_guess, ϵ, opts, max_iter=1e3)
+function CG_Poisson(b, p_guess, ϵ, opts)
     println("hello")
     N = opts["N"]
     Δx = opts["dx"]

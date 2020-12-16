@@ -4,9 +4,9 @@ include("CG.jl")
 
 # general functions
 
-function genPoissonMtx(opts)
+function genPoissonStreamMtx(size, opts)
 
-    N = opts["N"]
+    N = size
     hi = 1/opts["h"]
     println("updated gen mtx")
 
@@ -29,7 +29,8 @@ function genPoissonMtx(opts)
     #P[1, 1] = 1*hi^2
     #P[N^2, :] .= 0
     #P[N^2, 1] = 1*hi^2
-    return P
+    #return P
+    return -P
 end
 
 # compute BC
@@ -58,6 +59,8 @@ function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
 
     # are views more efficient than iterating
     # or am I creating unnecessary temporary arrays
+    # to specialize for lid driven cavity could also flip axes so
+    #   that when updating top velocity only access a column
 
     ω[N+2, :] = 2/h^2 .* (rn - rn1) .- 2*u_top/h
     ω[1, :] = 2/h^2 .* (r3 - r2) .+ 2*u_bottom/h
@@ -129,10 +132,10 @@ function runVorticityStream(opts, opts_BC)
     ω = zeros(N+2, N+2)
     ωtmp = zeros(N+2, N+2)
     ψ = zeros(N+2, N+2)
-    P = genPoissonMtx(opts)
+    P = genPoissonStreamMtx(N+2, opts)
     ϵ = 1e-3
 
-    max_iter = 10
+    max_iter = 2
 
     for i in 1:max_iter
         println(i)
@@ -143,14 +146,19 @@ function runVorticityStream(opts, opts_BC)
         #display(ω)
         #display(ψ)
         #return
-        ω_inner = @view ω[2:end-1, 2:end-1]
-        ω_vec = reshape(ω_inner, N*N, 1)
-        poisson_RHS = -ω_vec
-        ψ_inner = @view ψ[2:end-1, 2:end-1]
-        ψ_vec = vec(ψ_inner)
+        #ω_inner = @view ω[2:end-1, 2:end-1]
+        #ω_vec = reshape(ω_inner, N*N, 1)
+        ## sign
+        #poisson_RHS = -ω_vec
+        poisson_RHS = -1*reshape(ω, length(ω), 1)
+        #poisson_RHS = ω_vec
+        #ψ_inner = @view ψ[2:end-1, 2:end-1]
+        #ψ_vec = vec(ψ_inner)
+        ψ_vec = reshape(ψ, length(ψ), 1)
         println("enter CG")
-        ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, 200)
-        ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
+        ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
+        #ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
+        ψ = reshape(ψ_vec, N+2, N+2)
         println("leave CG")
     end
 
