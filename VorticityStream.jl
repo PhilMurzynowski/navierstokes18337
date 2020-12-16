@@ -1,7 +1,6 @@
+using LinearAlgebra, Kronecker
 
-
-
-# init
+include("CG.jl")
 
 # general functions
 
@@ -81,27 +80,37 @@ function updateVorticity(ω, ω_next, ψ, opts)
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
 
-    for i in 3:N
-        for j in 3:N
+    for i in 2:N+1
+        i_boundary = (i == 2 || i == N+1) ? true : false
+        for j in 2:N+1
             # higher indices currently correspond to top
             # u = dψ/dy
             u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i])
             # v = -dψ/dx
             v_ji = -1/(2*h)*(ψ[j, i+1] - ψ[j, i-1])
-            ωx = (u_ji >= 0) ? 
-                    (1/(3*h)*(-ω[j, i+2] + 3*ω[j, i+1] - 3*ω[j, i] + ω[j, i-1])) :
-                    (1/(3*h)*(-ω[j, i+1] + 3*ω[j, i] - 3*ω[j, i-1] + ω[j, i-2]))
-            ωy = (v_ji >= 0) ?
-                    (1/(3*h)*(-ω[j+2, i] + 3*ω[j+1, i] - 3*ω[j, i] + ω[j-1, i])) :
-                    (1/(3*h)*(-ω[j+1, i] + 3*ω[j, i] - 3*ω[j-1, i] + ω[j-2, i]))
 
             ω_next[j, i] = ω[j, i] + 
                         Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
                             -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
-                            + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i])
-                            - 1/2*u_ji*ωx
-                            - 1/2*v_ji*ωy
-                            )
+                            + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+
+            # if on the boundary don't use second order upwind
+            # could use sentinels instead of control flow but more memory
+            if i_boundary || j == 2 || j == N + 1
+                continue
+            else
+                ωx = (u_ji >= 0) ? 
+                        (1/(3*h)*(-ω[j, i+2] + 3*ω[j, i+1] - 3*ω[j, i] + ω[j, i-1])) :
+                        (1/(3*h)*(-ω[j, i+1] + 3*ω[j, i] - 3*ω[j, i-1] + ω[j, i-2]))
+                ωy = (v_ji >= 0) ?
+                        (1/(3*h)*(-ω[j+2, i] + 3*ω[j+1, i] - 3*ω[j, i] + ω[j-1, i])) :
+                        (1/(3*h)*(-ω[j+1, i] + 3*ω[j, i] - 3*ω[j-1, i] + ω[j-2, i]))
+
+                ω_next[j, i] += Δt*(
+                             - 1/2*u_ji*ωx
+                             - 1/2*v_ji*ωy
+                             )
+            end
         end
     end
     return ω_next
@@ -121,24 +130,36 @@ function runVorticityStream(opts, opts_BC)
     ωtmp = zeros(N+2, N+2)
     ψ = zeros(N+2, N+2)
     P = genPoissonMtx(opts)
-    ϵ = 1e-10
+    ϵ = 1e-3
 
     max_iter = 10
 
-    for i in max_iter
+    for i in 1:max_iter
+        println(i)
         updateVorticityWallBC!(ω, ψ, opts, opts_BC)
+        println("BC")
         ω  = updateVorticity(ω, ωtmp, ψ, opts)
+        println("update")
+        #display(ω)
+        #display(ψ)
+        #return
         ω_inner = @view ω[2:end-1, 2:end-1]
         ω_vec = reshape(ω_inner, N*N, 1)
         poisson_RHS = -ω_vec
         ψ_inner = @view ψ[2:end-1, 2:end-1]
-        ψ_vec = reshape(ψ_inner, N*N, 1)
-        ψ, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ)
+        ψ_vec = vec(ψ_inner)
+        println("enter CG")
+        ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, 200)
+        ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
+        println("leave CG")
     end
+
+    display(ω)
+    display(ψ)
 
 end
 
-n = 64
+N = 10
 h = 1/N
 dt = 0.001
 BC_opts = Dict("u_top"=>1.0,

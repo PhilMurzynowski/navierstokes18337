@@ -60,7 +60,7 @@ end
 # everything is kept in matrix form for easier indexing
 # pressure matrix is (N+2, N+2) for BC
 # loops are ordered to account for column-major ordering
-function CG_Poisson(b, p_guess, ϵ, opts)
+function CG_Poisson(b, p_guess, ϵ, opts, max_iter=1e3)
     println("hello")
     N = opts["N"]
     Δx = opts["dx"]
