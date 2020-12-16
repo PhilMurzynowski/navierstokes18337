@@ -1,4 +1,6 @@
 using LinearAlgebra, Kronecker
+using Makie, AbstractPlotting
+using AbstractPlotting: Node, hbox, vbox, heatmap
 
 include("CG.jl")
 
@@ -154,13 +156,13 @@ function runVorticityStream(opts, opts_BC)
     ψ = zeros(N, N)
     # thought about it, and generating mtx of size other than NxN doesn't make sense
     # can remove param later
-    P = genPoissonStreamMtx(N, opts)
+    P = genPoissonStreamMtx(N-2, opts)
     #println("P")
     #display(P)
     #return
     ϵ = 1e-10
 
-    max_iter = 20
+    max_iter = 100
 
     for i in 1:max_iter
         println(i)
@@ -171,14 +173,14 @@ function runVorticityStream(opts, opts_BC)
         #display(ω)
         #display(ψ)
         #return
-        #ω_inner = @view ω[2:end-1, 2:end-1]
-        #ω_vec = reshape(ω_inner, N*N, 1)
+        ω_inner = @view ω[2:end-1, 2:end-1]
+        ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
         ## sign
-        #poisson_RHS = -ω_vec
-        poisson_RHS = -1*reshape(ω, length(ω), 1)
+        poisson_RHS = -ω_vec
+        #poisson_RHS = -1*reshape(ω, length(ω), 1)
         #poisson_RHS = ω_vec
-        #ψ_inner = @view ψ[2:end-1, 2:end-1]
-        #ψ_vec = vec(ψ_inner)
+        ψ_inner = @view ψ[2:end-1, 2:end-1]
+        ψ_vec = vec(ψ_inner)
 
         #=
         ψ_vec = reshape(ψ, length(ψ), 1)
@@ -187,13 +189,17 @@ function runVorticityStream(opts, opts_BC)
         #ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
         =#
         ψ_vec = P \ poisson_RHS
-        ψ = reshape(ψ_vec, N, N)
+        ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
 
         println("leave CG")
     end
 
     display(ω)
     display(ψ)
+
+end
+
+function plot_ωψ(ω, ψ)
 
 end
 
