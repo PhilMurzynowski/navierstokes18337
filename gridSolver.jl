@@ -3,6 +3,8 @@ using LinearAlgebra
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
 
+include("CG.jl")
+
 function set_vel_BC!(u, v, opts_BC)
     u_top = opts_BC["u_top"]
     u_bottom = opts_BC["u_bottom"]
@@ -151,10 +153,10 @@ end
 #v2p(u, v, v_dependence, opts)
 #v_dependence
 
-#function poisson_solve(p1, p2, velocity_component, opts)
+#function grid_poisson_solve(p1, p2, velocity_component, opts)
     # use two arrays with swapping for memory reuse, p2 can initially be garbage
     # currently creating tmp manually for debugging
-function poisson_solve(p, velocity_component, opts)
+function grid_poisson_solve(p, velocity_component, opts)
     # currently using broadcast operations on matrices
     # iterating until convergence
 
@@ -198,14 +200,65 @@ function poisson_solve(p, velocity_component, opts)
     # desired answer will be in p1
 end
 
-# test of poisson_solve
+# test of grid_poisson_solve
 #u = ones(N, N)*3
 #v = ones(N, N)*2
 #v_dependence = zeros(N, N)
 #v2p(u, v, v_dependence, opts)
 #pressure1 = zeros(N+2, N+2)
 #pressure2 = zeros(N+2, N+2)
-#pressure_eps = poisson_solve(pressure1, pressure2, v_dependence, opts)
+#pressure_eps = grid_poisson_solve(pressure1, pressure2, v_dependence, opts)
+
+# not normally used in grid solver
+function genPoissonMtx(opts)
+
+    N = opts["N"]
+    hi = 1/opts["h"]
+    println("updated gen mtx")
+
+    L = zeros(N, N)
+    L[diagind(L, 0)] .= 2*hi^2
+    L[diagind(L, -1)] .= -1*hi^2
+    L[diagind(L, 1)] .= -1*hi^2
+    # build Poisson pressure matrix with Kronecker
+    # cant use I with Kronecker, not working
+    Id = 1*Matrix(I, N, N)
+    P = (Id ⊗ L) + (L ⊗ Id)
+    # Von Neumann BC and reference point modifications
+    BC = zeros(N, N)
+    BC[1, 1] = -hi^2
+    BC[N, N] = -hi^2
+    P += (Id ⊗ BC)
+    P[1:N, 1:N] += -hi^2*Id
+    P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
+    #P[1, :] .= 0
+    #P[1, 1] = 1*hi^2
+    #P[N^2, :] .= 0
+    #P[N^2, 1] = 1*hi^2
+    return P
+end
+
+function poisson_solve(p, velocity_component, P, opts, use_CG=false)
+    if use_CG == false
+        sol = grid_poisson_solve(p, velocity_component, opts)
+    elseif use_CG == true
+        #= 
+        ignore, this will not work
+
+        b = reshape(velocity_component, N*N, 1)
+        x_guess = @view p[2:end-1, 2:end-1]
+        x_guess = reshape(x_guess, N*N, 1)
+        sol, iter = CG_std(P, b, x_guess, 1e-9)
+        sol = reshape(sol, N, N)
+        p[:, 1] = p[:, 2]
+        p[1, :] = p[2, :]
+        p[:, end] = p[:, end-1]
+        p[end, :] .= 0 # do this last to avoid overwriting
+        =#
+        return
+    end
+    return sol
+end
 
 function plot_uvp(u, v, p, opts)
     h = opts["h"]
@@ -256,6 +309,7 @@ function run_simulation(opts, BC_opts)
     sim_iter = opts["simulation_iter"]
     N = opts["N"]
 
+    P = genPoissonMtx(opts)
     u1_mtx, v1_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
     #u2_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
     #pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
@@ -270,8 +324,8 @@ function run_simulation(opts, BC_opts)
         #println("in sim loop")
         #println("v_dependence")
         #display(v_dependence)
-        #pressure_eps, pressure1 = poisson_solve(pressure1, pressure2, v_for_poisson, opts)
-        pressure_eps, pressure = poisson_solve(pressure, v_for_poisson, opts)
+        #pressure_eps, pressure1 = grid_poisson_solve(pressure1, pressure2, v_for_poisson, opts)
+        pressure_eps, pressure = poisson_solve(pressure, v_for_poisson, P, opts)
         println(pressure_eps) # debuggin
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure, opts)
