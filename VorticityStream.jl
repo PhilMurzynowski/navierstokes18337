@@ -4,37 +4,9 @@ using AbstractPlotting: Node, hbox, vbox, heatmap, contour
 using Printf
 
 include("CG.jl")
+include("IChol.jl")
 
 # general functions
-
-function genPoissonStreamMtx(size, opts)
-
-    N = size
-    hi = 1/opts["h"]
-
-    L = zeros(N, N)
-    L[diagind(L, 0)] .= 2*hi^2
-    L[diagind(L, -1)] .= -1*hi^2
-    L[diagind(L, 1)] .= -1*hi^2
-    # build Poisson pressure matrix with Kronecker
-    # cant use I with Kronecker, not working
-    Id = 1*Matrix(I, N, N)
-    P = (Id ⊗ L) + (L ⊗ Id)
-    BC = zeros(N, N)
-    #BC[1, 1] = -hi^2
-    #BC[N, N] = -hi^2
-    #P += (Id ⊗ BC)
-    #P[1:N, 1:N] += -hi^2*Id
-    #P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
-    #P[1, :] .= 0
-    #P[1, 1] = 1*hi^2
-    #P[N^2, :] .= 0
-    #P[N^2, 1] = 1*hi^2
-    #return P
-    return -P
-end
-
-# compute BC
 
 # could this be fused to updateVoriticity for better cache use, repeating this question everywhere ha
 function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
@@ -242,7 +214,15 @@ function runVorticityStream(opts, opts_BC)
     tmp3 = zeros(N-2, N-2)
     tmp4 = zeros(N-2, N-2)
     # use if not using CG_Poisson
-    #P = genPoissonStreamMtx(N-2, opts)
+    use_special = false
+    if use_special == false
+        P = genPoissonMtx(N-2, opts)
+        # preconditioner
+        # sanity check with identity
+        #Minv = Diagonal(ones(size(P)))
+        # Incomplete Cholesky
+        L = ichol(P)
+    end
 
     for i in 1:timesteps
         updateVorticityWallBC!(ω, ψ, opts, opts_BC)
@@ -251,7 +231,6 @@ function runVorticityStream(opts, opts_BC)
         # or do the negative in the CG_Poisson solver
 
         # optimize away if statment later when not comparing
-        use_special = true
         if use_special
             # could modify this further so don't have to negate vorticity
             # when passing it in, simply keep negative vorticity as a variable
@@ -265,11 +244,15 @@ function runVorticityStream(opts, opts_BC)
         else
             ω_inner = @view ω[2:end-1, 2:end-1]
             ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
-            poisson_RHS = -ω_vec
+            # double check if negative or not
+            poisson_RHS = ω_vec
+            #poisson_RHS = -ω_vec
             ψ_inner = @view ψ[2:end-1, 2:end-1]
             ψ_vec = vec(ψ_inner)
 
-            ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
+            #ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
+            #ψ_vec, num_iter = PCG_std(P, Minv, poisson_RHS, ψ_vec, ϵ, N^2)
+            ψ_vec, num_iter = ICCG_std(P, L, poisson_RHS, ψ_vec, ϵ, N^2)
             #ψ_vec = P \ poisson_RHS
             ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
         end
@@ -290,7 +273,7 @@ function plot_ωψ(ω, ψ)
     display(c)
 end
 
-N = 64
+N = 10
 h = 1/N
 dt = 0.001
 BC_opts = Dict("u_top"=>1.0,

@@ -4,7 +4,8 @@ using LinearAlgebra
 
 """
 Incomplete Cholesky factorization
-Do not need to optimize as only need to get a sense of how it looks
+Not currently optimized as only need to ever call it once.
+Would be very good to specify it as a LowerTriangular type
 Disclaimer: Not my code
 Source: wikipedia => https://en.wikipedia.org/wiki/Incomplete_Cholesky_factorization
 """
@@ -38,7 +39,7 @@ function ichol(a)
 end
 
 
-function genPoissonStreamMtx(size, opts)
+function genPoissonMtx(size, opts)
     N = size
     hi = 1/opts["h"]
 
@@ -56,22 +57,25 @@ end
 
 function tests(opts)
     @printf "test start\n\n\n"
-    a = genPoissonStreamMtx(opts["N"], opts)
-    @printf "a\n"
-    display(a)
+    A = genPoissonMtx(opts["N"], opts)
+    @printf "A\n"
+    display(A)
     @printf "L\n"
-    L = ichol(a)
+    L = ichol(A)
     display(L)
     @printf "Linv"
     Linv = inv(L)
     display(Linv)
-    @printf "Minv\n"
-    Minv = Linv'*Linv
-    display(Minv)
+    #@printf "Minv\n"
+    #Minv = Linv'*Linv
+    #display(Minv)
+    @printf "LinvALinv'\n"
+    A_new = Linv*A*Linv'
+    display(A_new)
 end
 
-#N = 3
-#opts = Dict("N"=>N,
-#            "h"=>1/N
-#            )
-#tests(opts)
+N = 5
+opts = Dict("N"=>N,
+            "h"=>1/N
+            )
+tests(opts)
