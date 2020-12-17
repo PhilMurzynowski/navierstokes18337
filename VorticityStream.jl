@@ -1,6 +1,7 @@
 using LinearAlgebra, Kronecker
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap, contour
+using Printf
 
 include("CG.jl")
 
@@ -255,8 +256,12 @@ function runVorticityStream(opts, opts_BC)
             # could modify this further so don't have to negate vorticity
             # when passing it in, simply keep negative vorticity as a variable
             # but negating not expensive, and could lead to bugs down the line
-            #ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
-            ψ, num_iter = PCG_Poisson_diag(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
+            #ψ_copy = copy(ψ)
+            ψ, num_iter1 = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
+            #ψ, num_iter2 = PCG_Poisson_diag(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
+            #@printf "CG: %d, PCG_diag %d\n" num_iter1 num_iter2
+            #@printf "PCG_diag %d\n" num_iter2
+            @printf "CG %d\n" num_iter1
         else
             ω_inner = @view ω[2:end-1, 2:end-1]
             ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
@@ -300,7 +305,7 @@ opts = Dict("N"=>N,
             "h"=>h,
             "dt"=>dt,
             "Re"=>300.0,
-            "ϵ"=>1e-10,         # tolerance parameter for CG
+            "ϵ"=>1e-6,         # tolerance parameter for CG
             "timesteps"=>100
             )
 @time ω, ψ = runVorticityStream(opts, BC_opts)
