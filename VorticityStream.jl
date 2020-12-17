@@ -96,8 +96,9 @@ end
 # should I be storing u v in arrays
 # does second order differencing have more potential for cache misses? consequence
 """
-Update vorticity to next timestep
+Update vorticity one timestep
 Note: use normal edition for more performance
+      left for benchmarking convenience against standard version
 """
 function updateVorticity_branching(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
@@ -142,38 +143,51 @@ function updateVorticity_branching(ω, ω_next, ψ, opts)
 end
 
 
+"""
+Update vorticity one timestep
+Notes:
+    @inbounds may likely be overkill given recent Julia updates
+    done to be sure
+"""
 function updateVorticity(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
 
-    println("aaaa")
+    # pulled some constants with division out
+    # might be taken care of by compiler anyway
+    ih2 = 1/(2*h)
+    ih3 = 1/(3*h)
+    ih_sq = 1/(h^2)
+    iRe = 1/Re
+
     # inline functions as they're just a few expressions
     # standard update, used on boundaries
     @inline function update_std(j, i)
-        u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
-        v_ji = -1/(2*h)*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
+        u_ji = ih2*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
+        v_ji = -ih2*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
         ω_next[j, i] = ω[j, i] + 
-                    Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
-                        -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
-                        + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+                    Δt*( -ih2*u_ji*(ω[j, i+1] - ω[j, i-1])
+                        -ih2*v_ji*(ω[j+1, i] - ω[j-1, i])
+                        + ih_sq/Re*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
     end
     # if not on boundary can use 2nd order upwind for more accuracy
     @inline function update_order2_upwind(j, i)
-        u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
-        v_ji = -1/(2*h)*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
+        u_ji = ih2*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
+        v_ji = -ih2*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
 
+        # use ternary assignment instead of full branching, should be faster
         ωx = (u_ji >= 0) ? 
-                (1/(3*h)*(-ω[j, i+2] + 3*ω[j, i+1] - 3*ω[j, i] + ω[j, i-1])) :
-                (1/(3*h)*(-ω[j, i+1] + 3*ω[j, i] - 3*ω[j, i-1] + ω[j, i-2]))
+                ih3*(-ω[j, i+2] + 3*ω[j, i+1] - 3*ω[j, i] + ω[j, i-1]) :
+                ih3*(-ω[j, i+1] + 3*ω[j, i] - 3*ω[j, i-1] + ω[j, i-2])
         ωy = (v_ji >= 0) ?
-                (1/(3*h)*(-ω[j+2, i] + 3*ω[j+1, i] - 3*ω[j, i] + ω[j-1, i])) :
-                (1/(3*h)*(-ω[j+1, i] + 3*ω[j, i] - 3*ω[j-1, i] + ω[j-2, i]))
+                ih3*(-ω[j+2, i] + 3*ω[j+1, i] - 3*ω[j, i] + ω[j-1, i]) :
+                ih3*(-ω[j+1, i] + 3*ω[j, i] - 3*ω[j-1, i] + ω[j-2, i])
 
         ω_next[j, i] = ω[j, i] + 
-                    Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
-                        -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
-                        + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+                    Δt*( -ih2*u_ji*(ω[j, i+1] - ω[j, i-1])
+                        -ih2*v_ji*(ω[j+1, i] - ω[j-1, i])
+                        + ih_sq/Re*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
         ω_next[j, i] += Δt*(
                         - 1/2*u_ji*ωx
                         - 1/2*v_ji*ωy
@@ -182,16 +196,16 @@ function updateVorticity(ω, ω_next, ψ, opts)
 
     # left boundary
     i = 2
-    for j in 2:N-1
+    @inbounds for j in 2:N-1
         update_std(j, i)
     end
     # end of left boundary code
-    for i in 3:N-2
+    @inbounds for i in 3:N-2
         # bottom boundary
         j = 2
         update_std(j, i)
         # end of bottom boundary
-        for j in 3:N-2
+        @inbounds for j in 3:N-2
             update_order2_upwind(j, i)
         end
         # bottom boundary
@@ -201,7 +215,7 @@ function updateVorticity(ω, ω_next, ψ, opts)
     end
     # right boundary
     i = N-1
-    for j in 2:N-1
+    @inbounds for j in 2:N-1
         update_std(j, i)
     end
     # end of right boundary code
