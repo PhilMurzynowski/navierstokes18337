@@ -234,6 +234,11 @@ function runVorticityStream(opts, opts_BC)
     ω = zeros(N, N)
     ωtmp = zeros(N, N)
     ψ = zeros(N, N)
+
+    # arrays for memory reuse, preallocating
+    tmp1 = zeros(N-2, N-2)
+    tmp2 = zeros(N-2, N-2)
+    tmp3 = zeros(N-2, N-2)
     # use if not using CG_Poisson
     #P = genPoissonStreamMtx(N-2, opts)
 
@@ -243,10 +248,13 @@ function runVorticityStream(opts, opts_BC)
         # perhaps keep vorticity negated if going to be flipping sign
         # or do the negative in the CG_Poisson solver
 
-        #debuggin
+        # optimize away if statment later when not comparing
         use_special = true
         if use_special
-            ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts)
+            # could modify this further so don't have to negate vorticity
+            # when passing it in, simply keep negative vorticity as a variable
+            # but negating not expensive, and could lead to bugs down the line
+            ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
         else
             ω_inner = @view ω[2:end-1, 2:end-1]
             ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)

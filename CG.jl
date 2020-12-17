@@ -65,57 +65,101 @@ Do not need to generate Poisson matrix.
 
 Note: everything is kept and expected to be passed in a 2D Array, makes for more
 readable indexing
+Note: actually using the negative of the poisson mtx so don't have to negate vorticity when passing it in
 """
-function CG_Poisson(b, p_guess, ϵ, opts)
+function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     N = opts["N"]
     Δx = opts["dx"]
     Δy = opts["dy"]
-    b = reshape(b, N, N)
+    h = opts["h"]
+    ih_sq = 1/h^2
+
     # compute initial residual
-    # can pass in in the future
-    residual = zeros(N, N)
-    for i in 2:N-1
-        #i_inner = i-1  # for indexing convenience
-        for j in 2:N-1
-            #j_inner = j - 1
-            #residual[j, i] = b[j_inner, i_inner] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
-            residual[j, i] = b[j, i] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
-            residual[j, i] -= 1/Δy^2*(p_guess[j+1, i] - 2*p_guess[j, i] + p_guess[j-1, i])
+    # residual should be N-2, N-2
+    # can keep it slightly smaller as only iterating over inner points
+    # leads to some slight loop unrolling and complexity later
+    # does not matter if garbage in tmp1,
+    # residual will be fully overwritten before use 
+    residual = tmp1
+
+    @inbounds for i in 2:N-1
+        i_inner = i-1  # for indexing convenience
+        @inbounds for j in 2:N-1
+            j_inner = j - 1
+            residual[j_inner, i_inner] = b[j, i] - ih_sq*(x_guess[j, i+1] - 2*x_guess[j, i] + x_guess[j, i-1])
+            residual[j_inner, i_inner] -= ih_sq*(x_guess[j+1, i] - 2*x_guess[j, i] + x_guess[j-1, i])
         end
     end
-    # any bugs with copying here?
-    search_direction = residual
+    # same idea with search_direction, reuse array
+    # have to copy residual once initially
+    search_direction = tmp2
+    search_direction = copy(residual)
     rTr = dot(residual, residual)
     rTr_next = nothing
-    pressure = p_guess
+    x = x_guess
     iter = 0
-    # pass in in the future to reuse
-    mvp = zeros(N, N) # init storage for matrix vector product
+    # storage for matrix vector product
+    # passed memory for reuse
+    # does not matter if garbage in tmp1,
+    # mvp will be fully overwritten before use
+    mvp = tmp3
+
     
+    @inline bottomleft(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j+1, i])
+    @inline left(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j+1, i] + sd[j-1, i])
+    @inline topleft(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j-1, i])
+    @inline inner(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j+1, i] + sd[j-1, i])
+    @inline bottomright(sd, j, i) = ih_sq*(-4*sd[j, i] + sd[j, i-1] + sd[j+1, i])
+    @inline right(sd, j, i) = ih_sq*(-4*sd[j, i] + sd[j, i-1] + sd[j+1, i] + sd[j-1, i])
+    @inline topright(sd, j, i) = ih_sq*(-4*sd[j, i] + sd[j, i-1] + sd[j-1, i])
+    @inline top(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j-1, i])
+    @inline bottom(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j+1, i])
+
     # using l1 norm so don't have to square tiny ϵ
     while norm(residual, 1) > ϵ
         iter += 1
-        # single matrix vector product optimization
-        for i in 2:N-1
-            for j in 2:N-1
-                mvp[j, i] = 1/Δx^2*(search_direction[j, i+1] - 2*search_direction[j, i] + search_direction[j, i-1])
-                mvp[j, i] += 1/Δy^2*(search_direction[j+1, i] - 2*search_direction[j, i] + search_direction[j-1, i])
-            end
+
+        # left column
+        mvp[1, 1] = bottomleft(search_direction, 1, 1)
+        @inbounds for j in 2:N-3 
+            mvp[j, 1] = left(search_direction, j, 1)
         end
+        mvp[N-2, 1] = topleft(search_direction, N-2, 1)
+        # end of left column
+
+        # inner points
+        @inbounds for i in 2:N-3
+            j = 1
+            mvp[j, i] = bottom(search_direction, j, i)
+            @inbounds for j in 2:N-3
+                mvp[j, i] = inner(search_direction, j, i)
+            end
+            j = N-2
+            mvp[j, i] = top(search_direction, j, i)
+        end
+        # end of inner points
+
+        # right column
+        mvp[1, N-2] = bottomright(search_direction, 1, N-2)
+        @inbounds for j in 2:N-3
+            mvp[j, N-2] = right(search_direction, j, N-2)
+        end
+        mvp[N-2, N-2] = topright(search_direction, N-2, N-2)
+        # end of right column
+
         # calculate step size
         step_size = rTr / dot(search_direction, mvp)
         residual -= step_size.*mvp
         rTr_next = dot(residual, residual)
         gsc = rTr_next / rTr
         rTr = rTr_next
-        # update pressure solution
-        # One way to update pressure
-        # TODO: However with with a better iteration pattern hopefully avoid cachemisses
-        pressure += step_size.*search_direction
-        
+        # update x solution
+        # using broadcast operation instead of loop to encourage vectorizing
+        # will += of a slice create a new array... check
+        x[2:end-1, 2:end-1] .+= step_size*search_direction
         search_direction = residual + gsc.*search_direction
     end
 
-    return pressure, iter
+    return x, iter
 
 end
