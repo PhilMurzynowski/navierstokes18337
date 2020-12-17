@@ -83,7 +83,7 @@ function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
         # left
         # right
         ω[j, 1] = -2/h^2*ψ[j, 2] + 2/h*v_left
-        ω[j, N] = -2/h^2*ψ[j, N-1] - 2/h*v_right
+        ω[j, N] = -2/h^2*ψ[j, N-1] + 2/h*v_right
     end
     return
 end
@@ -286,9 +286,9 @@ end
 N = 32
 h = 1/N
 dt = 0.001
-BC_opts = Dict("u_top"=>1.0,
-               "u_bottom"=>0.0,
-               "v_left"=>0.0,
+BC_opts = Dict("u_top"=>0.0,
+               "u_bottom"=>1.0,
+               "v_left"=>-1.0,
                "v_right"=>0.0)
 opts = Dict("N"=>N,
             "Nx"=>N,
