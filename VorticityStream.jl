@@ -104,7 +104,6 @@ function updateVorticity_branching(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
-
     # large j correspond to higher point in grid
     for i in 2:N-1
         i_boundary = (i == 2 || i == N-1) ? true : false
@@ -118,10 +117,8 @@ function updateVorticity_branching(ω, ω_next, ψ, opts)
                         Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
                             -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
                             + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
-
             # if on the boundary don't use second order upwind
             # could use sentinels instead of control flow but more memory
-
             if i_boundary || j == 2 || j == N-1
                 continue
             else
@@ -146,8 +143,7 @@ end
 """
 Update vorticity one timestep
 Notes:
-    @inbounds may likely be overkill given recent Julia updates
-    done to be sure
+    @inbounds may likely be overkill given recent Julia updates, included for assurance
 """
 function updateVorticity(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
@@ -187,7 +183,7 @@ function updateVorticity(ω, ω_next, ψ, opts)
         ω_next[j, i] = ω[j, i] + 
                     Δt*( -ih2*u_ji*(ω[j, i+1] - ω[j, i-1])
                         -ih2*v_ji*(ω[j+1, i] - ω[j-1, i])
-                        + ih_sq/Re*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+                        + ih_sq*iRe*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
         ω_next[j, i] += Δt*(
                         - 1/2*u_ji*ωx
                         - 1/2*v_ji*ωy
@@ -230,49 +226,38 @@ end
 
 
 function runVorticityStream(opts, opts_BC)
-    # init vorticity, streamfunction
     N = opts["N"]
+    ϵ = opts["ϵ"]
+    timesteps = opts["timesteps"]
+
+    # init vorticity, streamfunction
     ω = zeros(N, N)
     ωtmp = zeros(N, N)
     ψ = zeros(N, N)
-    # thought about it, and generating mtx of size other than NxN doesn't make sense
-    # can remove param later
-    P = genPoissonStreamMtx(N-2, opts)
-    #println("P")
-    #display(P)
-    #return
-    ϵ = 1e-10
+    # use if not using CG_Poisson
+    #P = genPoissonStreamMtx(N-2, opts)
 
-    max_iter = 100
-
-    for i in 1:max_iter
-        #println(i)
+    for i in 1:timesteps
         updateVorticityWallBC!(ω, ψ, opts, opts_BC)
-        #println("BC")
         ω  = updateVorticity(ω, ωtmp, ψ, opts)
-        #println("update")
-        #display(ω)
-        #display(ψ)
-        #return
-        ω_inner = @view ω[2:end-1, 2:end-1]
-        ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
-        ## sign
-        poisson_RHS = -ω_vec
-        #poisson_RHS = -1*reshape(ω, length(ω), 1)
-        #poisson_RHS = ω_vec
-        ψ_inner = @view ψ[2:end-1, 2:end-1]
-        ψ_vec = vec(ψ_inner)
+        # perhaps keep vorticity negated if going to be flipping sign
+        # or do the negative in the CG_Poisson solver
 
-        #=
-        ψ_vec = reshape(ψ, length(ψ), 1)
-        println("enter CG")
-        ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
-        #ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N, N)
-        =#
-        ψ_vec = P \ poisson_RHS
-        ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
+        #debuggin
+        use_special = true
+        if use_special
+            ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts)
+        else
+            ω_inner = @view ω[2:end-1, 2:end-1]
+            ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
+            poisson_RHS = -ω_vec
+            ψ_inner = @view ψ[2:end-1, 2:end-1]
+            ψ_vec = vec(ψ_inner)
 
-        #println("leave CG")
+            ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
+            #ψ_vec = P \ poisson_RHS
+            ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
+        end
     end
 
     display(ω)
@@ -304,6 +289,8 @@ opts = Dict("N"=>N,
             "dy"=>h,
             "h"=>h,
             "dt"=>dt,
-            "Re"=>300.0
+            "Re"=>300.0,
+            "ϵ"=>1e-10,         # tolerance parameter for CG
+            "timesteps"=>100
             )
 runVorticityStream(opts, BC_opts)

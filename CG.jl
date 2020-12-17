@@ -18,7 +18,7 @@ function CG_std(A, b, x_guess, ϵ, max_iter=1e3)
     # using l1 norm so don't have to square tiny ϵ
     #while sum(abs.(residual)) > ϵ
     while norm(residual, 1) > ϵ && iter < max_iter
-        println(iter)
+        #println(iter)
         iter += 1
         # single matrix vector product optimization
         mvp = A*search_direction
@@ -57,23 +57,29 @@ end
 
 #test_GC_std()
 
-# A is known to be the Poisson Matrix
-# everything is kept in matrix form for easier indexing
-# pressure matrix is (N+2, N+2) for BC
-# loops are ordered to account for column-major ordering
+"""
+CG gradient method specialized for 2D Poisson equation
+with Dirchlet Boundary conditions on all 4 sides.
+
+Do not need to generate Poisson matrix.
+
+Note: everything is kept and expected to be passed in a 2D Array, makes for more
+readable indexing
+"""
 function CG_Poisson(b, p_guess, ϵ, opts)
-    println("hello")
     N = opts["N"]
     Δx = opts["dx"]
     Δy = opts["dy"]
     b = reshape(b, N, N)
     # compute initial residual
-    residual = zeros(N+2, N+2)
-    for i in 2:N+1
-        i_inner = i-1  # for indexing convenience
-        for j in 2:N+1
-            j_inner = j - 1
-            residual[j, i] = b[j_inner, i_inner] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
+    # can pass in in the future
+    residual = zeros(N, N)
+    for i in 2:N-1
+        #i_inner = i-1  # for indexing convenience
+        for j in 2:N-1
+            #j_inner = j - 1
+            #residual[j, i] = b[j_inner, i_inner] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
+            residual[j, i] = b[j, i] - 1/Δx^2*(p_guess[j, i+1] - 2*p_guess[j, i] + p_guess[j, i-1])
             residual[j, i] -= 1/Δy^2*(p_guess[j+1, i] - 2*p_guess[j, i] + p_guess[j-1, i])
         end
     end
@@ -83,14 +89,15 @@ function CG_Poisson(b, p_guess, ϵ, opts)
     rTr_next = nothing
     pressure = p_guess
     iter = 0
-    mvp = zeros(N+2, N+2) # init storage for matrix vector product
+    # pass in in the future to reuse
+    mvp = zeros(N, N) # init storage for matrix vector product
     
     # using l1 norm so don't have to square tiny ϵ
-    while norm(residual, 1) > ϵ && iter <= 300
+    while norm(residual, 1) > ϵ
         iter += 1
         # single matrix vector product optimization
-        for i in 2:N+1
-            for j in 2:N+1
+        for i in 2:N-1
+            for j in 2:N-1
                 mvp[j, i] = 1/Δx^2*(search_direction[j, i+1] - 2*search_direction[j, i] + search_direction[j, i-1])
                 mvp[j, i] += 1/Δy^2*(search_direction[j+1, i] - 2*search_direction[j, i] + search_direction[j-1, i])
             end
@@ -105,11 +112,6 @@ function CG_Poisson(b, p_guess, ϵ, opts)
         # One way to update pressure
         # TODO: However with with a better iteration pattern hopefully avoid cachemisses
         pressure += step_size.*search_direction
-        ## update pressure BC
-        pressure[:, 1] = pressure[:, 2]
-        pressure[:, end] = pressure[:, end-1]
-        pressure[1, :] = pressure[2, :]
-        pressure[end, :] .= 0                   # do this last to avoid overwriting
         
         search_direction = residual + gsc.*search_direction
     end
