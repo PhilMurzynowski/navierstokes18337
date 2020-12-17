@@ -239,6 +239,7 @@ function runVorticityStream(opts, opts_BC)
     tmp1 = zeros(N-2, N-2)
     tmp2 = zeros(N-2, N-2)
     tmp3 = zeros(N-2, N-2)
+    tmp4 = zeros(N-2, N-2)
     # use if not using CG_Poisson
     #P = genPoissonStreamMtx(N-2, opts)
 
@@ -254,7 +255,8 @@ function runVorticityStream(opts, opts_BC)
             # could modify this further so don't have to negate vorticity
             # when passing it in, simply keep negative vorticity as a variable
             # but negating not expensive, and could lead to bugs down the line
-            ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
+            #ψ, num_iter = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
+            ψ, num_iter = PCG_Poisson_diag(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
         else
             ω_inner = @view ω[2:end-1, 2:end-1]
             ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)

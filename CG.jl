@@ -164,14 +164,22 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
 end
 
 """
-Same as CG_Poisson except also optimized to use a simple diagonal proconditioner
+Same as CG_Poisson except also optimized to use a simple diagonal proconditioner.
+Furthermore, since the 2D Poisson Matrix has the same constant value on the diagonals,
+it is especially easy to implement using broadcast operations.
+
+Apply M^-1 to the initual residual once instead of both A and b,
+and keep applying to residual.
 """
-function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
+function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     N = opts["N"]
     Δx = opts["dx"]
     Δy = opts["dy"]
     h = opts["h"]
     ih_sq = 1/h^2
+
+    # know diagonal values from Poisson mtx structure
+    idiag = -h^2/4
 
     # compute initial residual
     # residual should be N-2, N-2
@@ -189,12 +197,20 @@ function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
             residual[j_inner, i_inner] -= ih_sq*(x_guess[j+1, i] - 2*x_guess[j, i] + x_guess[j-1, i])
         end
     end
-    # same idea with search_direction, reuse array
+    # same idea, reuse array
+    presidual = tmp4    # using preconditioner
+    presidual = residual .* idiag
+
+
     # have to copy residual once initially
     search_direction = tmp2
-    search_direction = copy(residual)
-    rTr = dot(residual, residual)
-    rTr_next = nothing
+    search_direction = copy(presidual)
+    # instead of doing the first commented out operation below
+    # can dot product with itself so that it hopefully
+    # uses half as much memory, and mulitply once after
+    #rTpr = dot(residual, presidual)
+    rTpr = dot(residual, residual) * idiag
+    rTpr_next = nothing
     x = x_guess
     iter = 0
     # storage for matrix vector product
@@ -247,16 +263,17 @@ function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
         # end of right column
 
         # calculate step size
-        step_size = rTr / dot(search_direction, mvp)
+        step_size = rTpr / dot(search_direction, mvp)
         residual -= step_size.*mvp
-        rTr_next = dot(residual, residual)
-        gsc = rTr_next / rTr
-        rTr = rTr_next
+        presidual = residual .* idiag
+        rTpr_next = dot(residual, residual) * idiag
+        gsc = rTpr_next / rTpr
+        rTpr = rTpr_next
         # update x solution
         # using broadcast operation instead of loop to encourage vectorizing
         # will += of a slice create a new array... check
         x[2:end-1, 2:end-1] .+= step_size*search_direction
-        search_direction = residual + gsc.*search_direction
+        search_direction = presidual + gsc.*search_direction
     end
 
     return x, iter
