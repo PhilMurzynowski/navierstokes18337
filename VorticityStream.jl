@@ -1,6 +1,6 @@
 using LinearAlgebra, Kronecker
 using Makie, AbstractPlotting
-using AbstractPlotting: Node, hbox, vbox, heatmap
+using AbstractPlotting: Node, hbox, vbox, heatmap, contour
 
 include("CG.jl")
 
@@ -95,15 +95,19 @@ end
 # can switch to Dormand-Prince
 # should I be storing u v in arrays
 # does second order differencing have more potential for cache misses? consequence
-function updateVorticity(ω, ω_next, ψ, opts)
+"""
+Update vorticity to next timestep
+Note: use normal edition for more performance
+"""
+function updateVorticity_branching(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
 
+    # large j correspond to higher point in grid
     for i in 2:N-1
-        #i_boundary = (i == 2 || i == N+1) ? true : false
+        i_boundary = (i == 2 || i == N-1) ? true : false
         for j in 2:N-1
-            # higher indices currently correspond to top
             # u = dψ/dy
             u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i])
             # v = -dψ/dx
@@ -117,9 +121,7 @@ function updateVorticity(ω, ω_next, ψ, opts)
             # if on the boundary don't use second order upwind
             # could use sentinels instead of control flow but more memory
 
-            #= debugging, don't use 2nd order upwind at all for now
-
-            if i_boundary || j == 2 || j == N + 1
+            if i_boundary || j == 2 || j == N-1
                 continue
             else
                 ωx = (u_ji >= 0) ? 
@@ -134,13 +136,78 @@ function updateVorticity(ω, ω_next, ψ, opts)
                              - 1/2*v_ji*ωy
                              )
             end
-
-            =#
         end
     end
     return ω_next
 end
 
+
+function updateVorticity(ω, ω_next, ψ, opts)
+    Δt = opts["dt"]
+    h = opts["h"]   # just use h since know using dx and dy equal
+    Re = opts["Re"]
+
+    println("aaaa")
+    # inline functions as they're just a few expressions
+    # standard update, used on boundaries
+    @inline function update_std(j, i)
+        u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
+        v_ji = -1/(2*h)*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
+        ω_next[j, i] = ω[j, i] + 
+                    Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
+                        -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
+                        + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+    end
+    # if not on boundary can use 2nd order upwind for more accuracy
+    @inline function update_order2_upwind(j, i)
+        u_ji = 1/(2*h)*(ψ[j+1, i] - ψ[j-1, i]) # u = dψ/dy
+        v_ji = -1/(2*h)*(ψ[j, i+1] - ψ[j, i-1]) # v = -dψ/dx
+
+        ωx = (u_ji >= 0) ? 
+                (1/(3*h)*(-ω[j, i+2] + 3*ω[j, i+1] - 3*ω[j, i] + ω[j, i-1])) :
+                (1/(3*h)*(-ω[j, i+1] + 3*ω[j, i] - 3*ω[j, i-1] + ω[j, i-2]))
+        ωy = (v_ji >= 0) ?
+                (1/(3*h)*(-ω[j+2, i] + 3*ω[j+1, i] - 3*ω[j, i] + ω[j-1, i])) :
+                (1/(3*h)*(-ω[j+1, i] + 3*ω[j, i] - 3*ω[j-1, i] + ω[j-2, i]))
+
+        ω_next[j, i] = ω[j, i] + 
+                    Δt*( -1/(2*h)*u_ji*(ω[j, i+1] - ω[j, i-1])
+                        -1/(2*h)*v_ji*(ω[j+1, i] - ω[j-1, i])
+                        + 1/(Re*h^2)*(ω[j, i+1] - ω[j, i-1] - 4*ω[j, i] + ω[j+1, i] + ω[j-1, i]))
+        ω_next[j, i] += Δt*(
+                        - 1/2*u_ji*ωx
+                        - 1/2*v_ji*ωy
+                        )
+    end
+
+    # left boundary
+    i = 2
+    for j in 2:N-1
+        update_std(j, i)
+    end
+    # end of left boundary code
+    for i in 3:N-2
+        # bottom boundary
+        j = 2
+        update_std(j, i)
+        # end of bottom boundary
+        for j in 3:N-2
+            update_order2_upwind(j, i)
+        end
+        # bottom boundary
+        j = N-1
+        update_std(j, i)
+        # end of bottom boundary
+    end
+    # right boundary
+    i = N-1
+    for j in 2:N-1
+        update_std(j, i)
+    end
+    # end of right boundary code
+
+    return ω_next
+end
 
 # solve poisson with CG
 
@@ -165,11 +232,11 @@ function runVorticityStream(opts, opts_BC)
     max_iter = 100
 
     for i in 1:max_iter
-        println(i)
+        #println(i)
         updateVorticityWallBC!(ω, ψ, opts, opts_BC)
-        println("BC")
+        #println("BC")
         ω  = updateVorticity(ω, ωtmp, ψ, opts)
-        println("update")
+        #println("update")
         #display(ω)
         #display(ψ)
         #return
@@ -191,21 +258,27 @@ function runVorticityStream(opts, opts_BC)
         ψ_vec = P \ poisson_RHS
         ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
 
-        println("leave CG")
+        #println("leave CG")
     end
 
     display(ω)
     display(ψ)
+    plot_ωψ(ω, ψ)
 
 end
 
 function plot_ωψ(ω, ψ)
-
+    h = opts["h"]
+    N = opts["N"]
+    xs = 0.0:h:h*(N-1)
+    ys = 0.0:h:h*(N-1)
+    c = contour(xs, ys, ψ')
+    display(c)
 end
 
-N = 10
+N = 32
 h = 1/N
-dt = 0.0001
+dt = 0.001
 BC_opts = Dict("u_top"=>1.0,
                "u_bottom"=>0.0,
                "v_left"=>0.0,
@@ -217,6 +290,6 @@ opts = Dict("N"=>N,
             "dy"=>h,
             "h"=>h,
             "dt"=>dt,
-            "Re"=>150.0
+            "Re"=>300.0
             )
 runVorticityStream(opts, BC_opts)
