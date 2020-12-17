@@ -268,28 +268,28 @@ function runVorticityStream(opts, opts_BC)
         end
     end
 
-    display(ω)
-    display(ψ)
-    plot_ωψ(ω, ψ)
+    return ω, ψ
 
 end
 
 function plot_ωψ(ω, ψ)
     h = opts["h"]
     N = opts["N"]
+    display(ω)
+    display(ψ)
     xs = 0.0:h:h*(N-1)
     ys = 0.0:h:h*(N-1)
     c = contour(xs, ys, ψ')
     display(c)
 end
 
-N = 32
+N = 64
 h = 1/N
 dt = 0.001
-BC_opts = Dict("u_top"=>0.0,
-               "u_bottom"=>1.0,
-               "v_left"=>-1.0,
-               "v_right"=>0.0)
+BC_opts = Dict("u_top"=>1.0,
+               "u_bottom"=>0.0,
+               "v_left"=>0.0,
+               "v_right"=>1.0)
 opts = Dict("N"=>N,
             "Nx"=>N,
             "Ny"=>N,
@@ -301,4 +301,5 @@ opts = Dict("N"=>N,
             "ϵ"=>1e-10,         # tolerance parameter for CG
             "timesteps"=>100
             )
-runVorticityStream(opts, BC_opts)
+@time ω, ψ = runVorticityStream(opts, BC_opts)
+plot_ωψ(ω, ψ)
