@@ -115,22 +115,16 @@ function timing_test(u, opts)
     h = opts["h"]
     #ϵ = opts["ϵ"]
 
-    # UPDATE genPoissonMtx
     Ptmp = genPoissonMtx(N, h)
     # Incomplete Cholesky
-    # UDPATE make all of these banded!
     chol = cholesky(Ptmp)
     Utmp = chol.U
     Utmp[Ptmp .== 0.0] .= 0
     Minv = inv(Utmp'*Utmp)
-    # update P after Cholesky factorization as
-    # no factorization exists for banded
-    #P = genPoissonMtxBanded(N, h)
-
     # convert both to sparse
     # doing this workaround because of bugs with setindex! and setting to 0
     P = sparse(Ptmp)
-    U = sparse(Utmp)
+    U = UpperTriangular(sparse(Utmp))
 
     source = determine_source(u, P)
 
@@ -172,7 +166,7 @@ function timing_test(u, opts)
 
         # from 2nd run on will be faster to to JIT compile
         # so overwrite first
-        if i == 1
+        if j == 1
             i -= 1
         end
     end
@@ -189,7 +183,7 @@ function timing_test(u, opts)
 end
 
 # parameters for test
-N = 32
+N = 64
 h = 1/N
 ϵ = 1e-6
 opts = Dict("N"=>N,

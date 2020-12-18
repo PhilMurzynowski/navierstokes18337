@@ -202,6 +202,9 @@ Function to run the simulation with given options.
 Optimization Note:
     Potentially could get rid of reshaping and make ψ smaller,
     but currently not a priority and would only result in a decrease in readability.
+    Conversion to vec when passing ψ to ICCG has a very noticeable improvement in time.
+        Pay once for the cost to conversion but during iteration
+        in the CG solver it becomes much more efficient due to better data layout, no extra zeros.
 """
 function run_vorticitystream_simulation(opts, opts_BC)
     N = opts["N"]
@@ -214,21 +217,25 @@ function run_vorticitystream_simulation(opts, opts_BC)
     ψ = zeros(N, N)
 
     # arrays for memory reuse, preallocating
+    # TODO: add to ICCG, currently unused
     tmp1 = zeros(N-2, N-2)
     tmp2 = zeros(N-2, N-2)
     tmp3 = zeros(N-2, N-2)
     tmp4 = zeros(N-2, N-2)
 
-    # UPDATE!! using outdated methods
-    P = genPoissonMtx(N-2, opts["h"])
-    # Incomplete Cholesky Preconditioner for use with ICCG
-    # pay a one time cost of factorizing matrix
-    chol = cholesky(P)
-    # CHECK if U is still banded! Tag as banded! should have speedups
-    U = chol.U
-    U[P .== 0.0] .= 0
+    Ptmp = genPoissonMtx(N-2, h)
+    # Incomplete Cholesky
+    chol = cholesky(Ptmp)
+    Utmp = chol.U
+    Utmp[Ptmp .== 0.0] .= 0
+    Minv = inv(Utmp'*Utmp)
+    # convert both to sparse
+    # doing this workaround because of bugs with setindex! and setting to 0
+    P = sparse(Ptmp)
+    U = sparse(Utmp)
 
     for i in 1:timesteps
+        # UPDATE all function including ICCG to use preallocated memory!
         vs_updateVorticityWallBC!(ω, ψ, opts, opts_BC)
         ω  = vs_updateVorticity(ω, ωtmp, ψ, opts)
         # some reshaping is necessary as only updating inner entries
