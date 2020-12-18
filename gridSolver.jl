@@ -1,30 +1,25 @@
-using Kronecker
 using LinearAlgebra
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
+using Printf
 
-include("CG.jl")
-
-function set_vel_BC!(u, v, opts_BC)
+"""
+Few operations to set BC
+Inlined as only a few slicing operations
+"""
+@inline function set_vel_BC!(u, v, opts_BC)
     u_top = opts_BC["u_top"]
     u_bottom = opts_BC["u_bottom"]
     v_left = opts_BC["v_left"]
     v_right = opts_BC["v_right"]
-
-    # creating copies for debuggin
-    #u_new = deepcopy(u)
-    #v_new = deepcopy(v)
-
-
-    # rest should be 0 if at BC
-    # may be able to remove
+    # rest e.g u_right should be 0 if at boundary as can't go through wall
+    # don't actually need to update since init to 0 and only interior points updated
+    #=
     u[:, 1] .= 0
     u[:, end] .= 0
     v[1, :] .= 0
     v[end, :] .= 0
-
-    #println("u_top")
-    #println(u_top)
+    =#
     u[1, :] .= u_bottom
     u[end, :] .= u_top
     v[:, 1] .= v_left
@@ -33,19 +28,19 @@ function set_vel_BC!(u, v, opts_BC)
     return
 end
 
-#@inline function velocity_update!(u1, v1, u2, v2, p, opts)
-#function velocity_update(u1, v1, u2, v2, p, opts)
-function velocity_update(u1, v1, p, opts)
-    # inlining because many of these functions will be reusing views
-    # use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
+"""
+Function to update velocity
+Inlining because many of these functions will be reusing views,
+    perhaps could get picked up by compiler
+Use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
+    in the inner points, the BC must be set properly for both
+"""
+@inline function velocity_update(u1, v1, u2, v2, p, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
     μ = opts["mu"]
     ρ = opts["rho"]
-
-    u2 = deepcopy(u1)
-    v2 = deepcopy(v1)
 
     u1_c = @view u1[2:end-1, 2:end-1]
     u1_r = @view u1[2:end-1, 3:end]
@@ -80,14 +75,6 @@ function velocity_update(u1, v1, p, opts)
                             + μ/Δy^2*(v1_b - 2*v1_c + v1_t)
                             ))
 
-    #println("end of velocity update")
-    #println("u2")
-    #display(u2)
-    #println("v2_c")
-    #display(v2_c)
-    # swapping inside a function won't do anything
-    #v1, v2 = v2, v1
-    #u1, u2 = u2, u1
     return u2, v2
 end
 
@@ -96,20 +83,11 @@ function to assemble term describing pressure dependence on velocity
     output: v_dependence
         passed in for memory reuse
 """
-#function v2p(v_dependence, u, v, opts)
-function v2p(u, v, opts)
+function v2p(v_dependence, u, v, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
     N = opts["N"]
-
-    v_dependence = zeros(N, N)
-
-    #println("inside v2p")
-    #println("u")
-    #display(u)
-    #println("v")
-    #display(v)
 
     # using views to attempt to minimize creating new arrays
     # using this indexing because have to be careful with BC, boundary conditions
@@ -123,57 +101,38 @@ function v2p(u, v, opts)
     v_b = @view v[3:end, 2:end-1]
     v_t = @view v[1:end-2, 2:end-1]
 
-    #depend_inner = @view v_dependence[2:end-1, 2:end-1]
-    # perhaps can do common subexpression elemination
-    # lengthy and in one line to try to get compiler to optimize subexpression
-    #depend_inner = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
-
-
-
+    # lengthy and in one line to try to get compiler to optimize / eliminate subexpressions
     v_dependence = (1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
                     - 1/(2*Δx)^2 * (u_r - u_l).^2
                     - 1/(2*Δy)^2 * (v_b - v_t).^2 
                     - 1/(2*Δy)^2 * (v_b - v_t).^2
                     - (1/(Δy)*(u_b - u_t)) .* (1/(Δx)*(v_r - v_l)) * 1/2
                     )
-    #depend_inner = 1/Δt * ((1/(2*Δx)*(u_r - u_l)) + 1/(2*Δy)*(v_b - v_t))
-    #depend_inner -= 1/(2*Δx)^2 * (u_r - u_l).^2
-    #depend_inner -= 1/(2*Δy)^2 * (v_b - v_t).^2
-    #depend_inner -= (1/(2Δy)*(u_b - u_t)) .* (1/(2*Δx)*(v_r - v_l))
-
 
     return v_dependence
 end
 
-
-# test of v2p
-#u = ones(N, N)*3
-#v = ones(N, N)*2
-#v_dependence = zeros(N, N)
-#v2p(u, v, v_dependence, opts)
-#v_dependence
-
-#function grid_poisson_solve(p1, p2, velocity_component, opts)
-    # use two arrays with swapping for memory reuse, p2 can initially be garbage
-    # currently creating tmp manually for debugging
-function grid_poisson_solve(p, velocity_component, opts)
-    # currently using broadcast operations on matrices
-    # iterating until convergence
-
-    # maybe copy is enough?
-    p1 = deepcopy(p)
+"""
+Solve for pressure by continuially iterating over global array
+    and using local updates until convergence.
+Uses two arrays with swapping for memory reuse, p2 can initially be garbage
+Currently using broadcast operations on matrices for vectorization
+"""
+function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
     
     Δx = opts["dx"]
     Δy = opts["dy"]
     ρ = opts["rho"]
-    iter = opts["poisson_iter"]
+    ϵ = opts["ϵ"]
 
-    # instead of using a while loop and comparing size of update in matrix,
-    # simply run a number of iterations and ouput difference from last update
-    # for analysis
-    for i in 1:iter
-        # maybe copy is enough?
-        p1 = deepcopy(p)
+    iter = 0
+    residual = Inf
+
+    # in reality could check residual much more periodically or run
+    # for a set number of iterations
+    # as subtracting matrices and norm operation quite expensive to do every operation
+    while residual > ϵ^2 && iter < max_iter
+        iter += 1
 
         p1_r = @view p1[2:end-1, 3:end]
         p1_l = @view p1[2:end-1, 1:end-2]
@@ -181,35 +140,23 @@ function grid_poisson_solve(p, velocity_component, opts)
         p1_t = @view p1[1:end-2, 2:end-1]
 
         # can compute prefix to its own constant if not done by compiler
-        p[2:end-1, 2:end-1] = (1.0/(2*(Δx^2 + Δy^2)) * ((Δx^2*(p1_t + p1_b)) + (Δy^2*(p1_r - p1_l)))
+        p2[2:end-1, 2:end-1] = (1.0/(2*(Δx^2 + Δy^2)) * ((Δx^2*(p1_t + p1_b)) + (Δy^2*(p1_r - p1_l)))
                             - ρ*Δx^2*Δy^2/(2*(Δx^2 + Δy^2)).*velocity_component
                             )
 
         # update BC
-        p[:, 1] = p[:, 2]
-        p[1, :] = p[2, :]
-        p[:, end] = p[:, end-1]
-        p[end, :] .= 0 # do this last to avoid overwriting
+        p2[:, 1] = p2[:, 2]
+        p2[1, :] = p2[2, :]
+        p2[:, end] = p2[:, end-1]
+        p2[end, :] = p2[end-1, :]
 
-        # swap to reuse memory
-        #p1, p2 = p2, p1
+        residual = norm(p2 - p1)
+        p2, p1 = p1, p2
+        #@printf "iter: %d, residual: %10f\n" iter residual
     end
 
-    #return maximum(abs.(p2 - p1)), p1
-    return maximum(abs.(p - p1)), p
-    # desired answer will be in p1
+    return p2, iter
 end
-
-# test of grid_poisson_solve
-#u = ones(N, N)*3
-#v = ones(N, N)*2
-#v_dependence = zeros(N, N)
-#v2p(u, v, v_dependence, opts)
-#pressure1 = zeros(N+2, N+2)
-#pressure2 = zeros(N+2, N+2)
-#pressure_eps = grid_poisson_solve(pressure1, pressure2, v_dependence, opts)
-
-
 
 function plot_uvp(u, v, p, opts)
     h = opts["h"]
@@ -232,92 +179,53 @@ function plot_uvp(u, v, p, opts)
     return
 end
 
-# full test
 
 function run_simulation(opts, BC_opts)
     
     sim_iter = opts["simulation_iter"]
     N = opts["N"]
 
+    # preallocate
     u1_mtx, v1_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
-    #u2_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
-    #pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
-    pressure = zeros(N+2, N+2)
+    u2_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
+    pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
     v_for_poisson = zeros(N, N)
 
+    # as will be swapping u1, u2 and v1, v2 make sure both have BC
+    # BC will not be affected in future as only update inner points
     set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+    set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
 
     for s in 1:sim_iter
-        #v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
-        v_for_poisson = v2p(u1_mtx, v1_mtx, opts)
-        #println("in sim loop")
-        #println("v_dependence")
-        #display(v_dependence)
-        #pressure_eps, pressure1 = grid_poisson_solve(pressure1, pressure2, v_for_poisson, opts)
-        pressure_eps, pressure = grid_poisson_solve(pressure, v_for_poisson, opts)
-        #println(pressure_eps) # debuggin
-        #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
-        #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure, opts)
-        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, pressure, opts)
-        #set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
-        #println("u1")
-        #display(u1)
-        #println("v1")
-        #display(v1)
-        #if s == 4
-        #    #plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
-        #    plot_uvp(u1_mtx, v1_mtx, pressure, opts)
-        #    return
-        #end
-
-        #set_vel_BC(u1, v1, BC_opts)
-        #set_vel_BC(u2, v2, BC_opts)
+        v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
+        pressure1, num_iter = grid_poisson_solve(pressure1, pressure2, v_for_poisson, opts)
+        #pressure1, num_iter = grid_poisson_solve(pressure1, v_for_poisson, opts)
+        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
     end
     
-    #plot_uvp(u1_mtx, v1_mtx, pressure1, opts)
-    plot_uvp(u1_mtx, v1_mtx, pressure, opts)
-    #display(pressure1)
-    #display(u1)
-    #display(v1)
-    #println("dual")
-    #display(pressure2)
-    #display(u2)
-    #display(v2)
+    return u1_mtx, v1_mtx, pressure1
 
 end
 
-# can declare as constants
 
 N = 32
 h = 3/N # chose this spacing largely for visuals
 dt = 0.001
-rho = 10.0
+# have to make rho 1 as didn't get around to including rho in later iterations
+# rho = 10.0
+rho = 1.0
 mu = 0.15
-opts = Dict("poisson_iter"=>50,
-            "simulation_iter"=>500,
+opts = Dict("simulation_iter"=>100,                
+            "ϵ"=>1e-4,          
             "N"=>N,
             "Nx"=>N,
             "Ny"=>N,
             "dx"=>h,
             "dy"=>h,
-            #"dxi"=>dxi,
-            #"dyi"=>dyi,
             "h"=>h,
-            #"hi"=>hi,
             "dt"=>dt,
-            #"dti"=>dti,
             "rho"=>rho,
             "mu"=>mu,
-            #"rhoi"=>rhoi,
-            #"mu"=>mu,
-            #"Re"=>Re,
-            #"Rei"=>Rei,
-            #"imin"=>imin,
-            #"jmin"=>jmin,
-            #"imax"=>imax,
-            #"jmax"=>jmax,
-            #"t0"=>0.0,
-            #"T"=>0.3 # working for one timestep?
             )
 BC_opts = Dict("u_top"=>1.0,
                "u_bottom"=>0.0,
@@ -325,4 +233,5 @@ BC_opts = Dict("u_top"=>1.0,
                "v_right"=>0.0)
 
 
-run_simulation(opts, BC_opts)
+u, v, p = run_simulation(opts, BC_opts)
+plot_uvp(u, v, p, opts)
