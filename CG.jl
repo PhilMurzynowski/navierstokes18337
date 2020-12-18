@@ -5,10 +5,10 @@ Included methods in CG.jl
 Conjugate Gradient                      CG(A, b, x_guess, ϵ, max_iter=1e3)
 Preconditioned CG                       PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
 CG specifcally for Poisson              CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
-    (no matrix passed in)
+    (no A matrix passed in)
 Incomplete Cholesky CG                  ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
-    (fastest, may be updated
-    to use preallocated tmp arrays as well)
+    (fastest)
+    (may be updated to use preallocated tmp arrays as well)
 """
 
 """
@@ -153,6 +153,8 @@ end
 CG gradient method specialized for 2D Poisson equation
 with Dirchlet Boundary conditions on all 4 sides.
 
+Warning: Currently broken, can use PCG_Poisson_diag for same results, not broken.
+
 Main advantage: Do not need to generate and pass in Poisson matrix.
 Main disadvantages: cannot easily take advantage of fast matrix mulitplies in Julia
     for sparse, banded matrices, and cannot easily apply a general class of preconditioners,
@@ -170,8 +172,6 @@ Optimization Notes:
 """
 function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     N = opts["N"]
-    Δx = opts["dx"]
-    Δy = opts["dy"]
     h = opts["h"]
     ih_sq = 1/h^2
 
@@ -198,7 +198,8 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     rTr = dot(residual, residual)
     rTr_next = nothing
     # only one slice, so don't slice during iteration
-    x = x_guess[2:end-1, 2:end-1]
+    #x = x_guess[2:end-1, 2:end-1]
+    x = x_guess
     iter = 0
     # storage for matrix vector product
     # passed memory for reuse
@@ -254,6 +255,16 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
         gsc = rTr_next / rTr
         rTr = rTr_next
         # update x solution
+
+        # will += of a slice create a new array... check
+        x[2:end-1, 2:end-1] .+= step_size*search_direction
+        search_direction = residual + gsc.*search_direction
+    end
+
+    return x, iter
+
+    #=
+    TODO: optimization
         # using broadcast operation instead of loop to encourage vectorizing
         x .+= step_size*search_direction
         search_direction = residual + gsc.*search_direction
@@ -263,7 +274,8 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     # Note: chance that this is buggy! double check
     x_guess[2:end-1, 2:end-1] = x
 
-    return x_full, iter
+    return x_guess, iter
+    =#
 
 end
 
@@ -281,8 +293,6 @@ Optimization Notes:
 """
 function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     N = opts["N"]
-    Δx = opts["dx"]
-    Δy = opts["dy"]
     h = opts["h"]
     ih_sq = 1/h^2
 
@@ -338,7 +348,8 @@ function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     @inline top(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j-1, i])
     @inline bottom(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j+1, i])
 
-    while rTr > ϵ^2
+    # approximate, not exactly rTr
+    while rTpr > ϵ^2
         iter += 1
 
         # left column

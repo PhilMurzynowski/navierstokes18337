@@ -36,7 +36,10 @@ end
 """
 Given u show that all solvers output the correct solution.
 """
-function visual_test(u, xs, ys, N, h, ϵ)
+function visual_test(u, xs, ys, opts)
+    N = opts["N"]
+    h = opts["h"]
+    ϵ = opts["ϵ"]
     hm, cl = get_u_scene(xs, ys, u)
 
     # UPDATE genPoissonMtx
@@ -63,6 +66,14 @@ function visual_test(u, xs, ys, N, h, ϵ)
     ICCG_sol, iter = ICCG(P, U, source, x_guess, ϵ)
     hm_ICCG, cl_ICCG = get_u_scene(xs, ys, reshape(ICCG_sol, N, N))
 
+    x_guess = zeros(N, N)
+    tmp1 = zeros(N-2, N-2)
+    tmp2 = copy(tmp1)
+    tmp3 = copy(tmp1)
+    tmp4 = copy(tmp1)
+    CGPoisson_sol, iter = CG_Poisson(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3)
+    hm_CGPoisson, cl_CGPoisson = get_u_scene(xs, ys, CGPoisson_sol)
+
     # hacky way to arrange things
     parent = Scene(resolution= (1000, 500))
     full_scene = hbox(
@@ -70,6 +81,7 @@ function visual_test(u, xs, ys, N, h, ϵ)
                     vbox(hm_CG, cl_CG), 
                     vbox(hm_PCG, cl_PCG), 
                     vbox(hm_ICCG, cl_ICCG), 
+                    vbox(hm_CGPoisson, cl_CGPoisson), 
                     #vbox(hm_CG_Poisson, cl_CG_Poisson), 
                     parent=parent)
     display(full_scene)
@@ -96,20 +108,18 @@ Then retest all with BandedMatrices
 function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
 =#
 
-#=
-opts = Dict("N"=>N,
-            "h"=>h,
-            )
-=#
 # parameters for test
-
 N = 32
 h = 1/N
 ϵ = 1e-10
+opts = Dict("N"=>N,
+            "h"=>h,
+            "ϵ"=>ϵ
+            )
 xs = 0.0:h:h*(N-1)
 ys = 0.0:h:h*(N-1)
 actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
-visual_test(actual_u, xs, ys, N, h, ϵ)
+visual_test(actual_u, xs, ys, opts)
 #=
 xs_extend = 0.0:h:h*(N+1)
 ys_extend = 0.0:h:h*(N+1)
