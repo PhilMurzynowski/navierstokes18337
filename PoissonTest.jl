@@ -36,21 +36,40 @@ end
 """
 Given u show that all solvers output the correct solution.
 """
-function visual_test(u, size, spacing, ϵ)
-    xs = 0.0:h:h*(N-1)
-    ys = 0.0:h:h*(N-1)
+function visual_test(u, xs, ys, N, h, ϵ)
     hm, cl = get_u_scene(xs, ys, u)
 
-    #P = genPoissonMtx(size, spacing)
-    #source = determine_source(u, P)
-    #x_guess = zeros(length(source))
-    #CG_sol = CG(P, source, x_guess, ϵ)
+    # UPDATE genPoissonMtx
+    P = genPoissonMtx(N, h)
+    # Incomplete Cholesky
+    # UDPATE make all of these banded!
+    chol = cholesky(P)
+    U = chol.U
+    U[P .== 0.0] .= 0
+    Minv = inv(U'*U)
+
+    source = determine_source(u, P)
+
+    # zero out every time to be sure
+    x_guess = zeros(length(source))
+    CG_sol, iter = CG(P, source, x_guess, ϵ)
+    hm_CG, cl_CG = get_u_scene(xs, ys, reshape(CG_sol, N, N))
+
+    x_guess = zeros(length(source))
+    PCG_sol, iter = PCG(P, Minv, source, x_guess, ϵ)
+    hm_PCG, cl_PCG = get_u_scene(xs, ys, reshape(PCG_sol, N, N))
+    
+    x_guess = zeros(length(source))
+    ICCG_sol, iter = ICCG(P, U, source, x_guess, ϵ)
+    hm_ICCG, cl_ICCG = get_u_scene(xs, ys, reshape(ICCG_sol, N, N))
 
     # hacky way to arrange things
     parent = Scene(resolution= (1000, 500))
     full_scene = hbox(
                     vbox(hm_actual, cl_actual),
-                    #vbox(hm_CG_std, cl_CG_std), 
+                    vbox(hm_CG, cl_CG), 
+                    vbox(hm_PCG, cl_PCG), 
+                    vbox(hm_ICCG, cl_ICCG), 
                     #vbox(hm_CG_Poisson, cl_CG_Poisson), 
                     parent=parent)
     display(full_scene)
@@ -76,6 +95,7 @@ Then retest all with BandedMatrices
 # also test this! might need some reformatting
 function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
 =#
+
 #=
 opts = Dict("N"=>N,
             "h"=>h,
@@ -83,15 +103,19 @@ opts = Dict("N"=>N,
 =#
 # parameters for test
 
-#=
 N = 32
 h = 1/N
+ϵ = 1e-10
+xs = 0.0:h:h*(N-1)
+ys = 0.0:h:h*(N-1)
+actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
+visual_test(actual_u, xs, ys, N, h, ϵ)
+#=
 xs_extend = 0.0:h:h*(N+1)
 ys_extend = 0.0:h:h*(N+1)
 actual_pressure = zeros(N, N)
 #actual_pressure = [x*y for y in ys, x in xs]
 #actual_pressure = [sin(2*x)+4*cos(4*y) for y in ys, x in xs]
-actual_pressure = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
 =#
 
 #hm_actual = heatmap(xs_extend, ys_extend, reverse(actual_pressure', dims=2), colormap=:berlin, show_axis=false)
