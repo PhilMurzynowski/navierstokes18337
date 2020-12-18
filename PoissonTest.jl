@@ -5,6 +5,7 @@ using BenchmarkTools
 
 include("Matrices.jl")
 include("CG.jl")
+include("gridSolver.jl")
 
 """
 File dedicated to testing and benchmarking different approaches to solving Poisson Eq.
@@ -40,7 +41,7 @@ function visual_test(u, xs, ys, opts)
     N = opts["N"]
     h = opts["h"]
     ϵ = opts["ϵ"]
-    hm, cl = get_u_scene(xs, ys, u)
+    hm_actual, cl_actual = get_u_scene(xs, ys, u)
 
     # UPDATE genPoissonMtx
     P = genPoissonMtx(N, h)
@@ -66,14 +67,16 @@ function visual_test(u, xs, ys, opts)
     ICCG_sol, iter = ICCG(P, U, source, x_guess, ϵ)
     hm_ICCG, cl_ICCG = get_u_scene(xs, ys, reshape(ICCG_sol, N, N))
 
+    #=
     x_guess = zeros(N, N)
     tmp1 = zeros(N-2, N-2)
     tmp2 = copy(tmp1)
     tmp3 = copy(tmp1)
     tmp4 = copy(tmp1)
     # note, meant to use CG_Poisson here, but broken for some reason and PCG_Poisson_diag is equivalent
-    CGPoisson_sol, iter = PCG_Poisson_diag(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
+    CGPoisson_sol, iter = PCG_Poisson_diagonal(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     hm_CGPoisson, cl_CGPoisson = get_u_scene(xs, ys, CGPoisson_sol)
+    =#
 
     x_guess = zeros(N, N)
     tmp = copy(x_guess)
@@ -81,24 +84,25 @@ function visual_test(u, xs, ys, opts)
     hm_grid, cl_grid = get_u_scene(xs, ys, Grid_sol)
 
     # hacky way to arrange things
-    parent = Scene(resolution= (400, 800))
+    parent = Scene(resolution= (800, 400))
     full_scene = hbox(
+                    vbox(hm_grid, cl_grid), #note shows up on bottom when plotting
                     vbox(hm_actual, cl_actual),
                     vbox(hm_CG, cl_CG), 
                     vbox(hm_PCG, cl_PCG), 
+                    #vbox(hm_CGPoisson, cl_CGPoisson), 
                     vbox(hm_ICCG, cl_ICCG), 
-                    vbox(hm_CGPoisson, cl_CGPoisson), 
                     parent=parent)
-    # separate plot for grid because its buggy
+
+    # separate plot if buggy
+    #=
     parent = Scene(resolution= (300, 300))
     grid_scene = hbox(
                     vbox(hm_grid, cl_grid), 
                     parent=parent)
+    =#
     #println(iter)
-    #display(u)
-    #display(Grid_sol)
     display(full_scene)
-    display(grid_scene)
     return
 end
 
@@ -133,14 +137,8 @@ opts = Dict("N"=>N,
             )
 xs = 0.0:h:h*(N-1)
 ys = 0.0:h:h*(N-1)
-actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
+# a bunch of test u
+#actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
+actual_u = [sin(8*x)+4*cos(8*y) for y in ys, x in xs]
 visual_test(actual_u, xs, ys, opts)
-#=
-actual_pressure = zeros(N, N)
-#actual_pressure = [x*y for y in ys, x in xs]
-#actual_pressure = [sin(2*x)+4*cos(4*y) for y in ys, x in xs]
-=#
-
-#hm_actual = heatmap(xs_extend, ys_extend, reverse(actual_pressure', dims=2), colormap=:berlin, show_axis=false)
-#cl_actual = colorlegend(hm_actual[end], raw = true, camera = campixel!)
 

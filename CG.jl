@@ -153,7 +153,7 @@ end
 CG gradient method specialized for 2D Poisson equation
 with Dirchlet Boundary conditions on all 4 sides.
 
-Warning: Currently broken, can use PCG_Poisson_diag for same results, not broken.
+Warning: Currently buggy, has also been replaced by ICCG.
 
 Main advantage: Do not need to generate and pass in Poisson matrix.
 Main disadvantages: cannot easily take advantage of fast matrix mulitplies in Julia
@@ -283,6 +283,8 @@ end
 Warning: This is actually totally useless precisely because all the diagonal entries
 are the same, reasoned after, now kept as proof of concept.
 
+Warning: Currently buggy, has also been replaced by ICCG.
+
 Same as CG_Poisson except also optimized to use a simple diagonal proconditioner.
 Furthermore, since the 2D Poisson Matrix has the same constant value on the diagonals,
 it is especially easy to implement using broadcast operations.
@@ -291,13 +293,14 @@ Optimization Notes:
     Apply M^-1 to the initual residual once instead of both A and b,
     and keep applying to residual.
 """
-function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
+function PCG_Poisson_diagonal(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     N = opts["N"]
     h = opts["h"]
     ih_sq = 1/h^2
 
     # know diagonal values from Poisson mtx structure
     idiag = -h^2/4
+    idiag = 1.0
 
     # compute initial residual
     # residual should be N-2, N-2
@@ -392,6 +395,7 @@ function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
         # will += of a slice create a new array... check
         x[2:end-1, 2:end-1] .+= step_size*search_direction
         search_direction = presidual + gsc.*search_direction
+        #@printf "iter: %d, rTr: %3.10f\n" iter rTpr
     end
 
     return x, iter
