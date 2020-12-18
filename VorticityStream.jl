@@ -260,6 +260,7 @@ function plot_ωψ(ω, ψ)
     xs = 0.0:h:h*(N-1)
     ys = 0.0:h:h*(N-1)
     c = contour(xs, ys, ψ')
+    display(c)
 end
 
 #=
@@ -285,58 +286,5 @@ opts = Dict("N"=>N,
             )
 @time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
 plot_ωψ(ω, ψ)
-
-=#
-
-
-#= SCRAP, CLEANUP
-
-    use_special = false
-    if use_special == false
-        P = genPoissonMtx(N-2, opts["h"])
-        # preconditioner
-        # sanity check with identity
-        Minv = Diagonal(ones(size(P)))
-        # Incomplete Cholesky
-        chol = cholesky(P)
-        U = chol.U
-        U[P .== 0.0] .= 0
-        #Minv = inv(U'*U)
-    end
-
-    for i in 1:timesteps
-        vs_updateVorticityWallBC!(ω, ψ, opts, opts_BC)
-        ω  = vs_updateVorticity(ω, ωtmp, ψ, opts)
-
-        if use_special
-            # could modify this further so don't have to negate vorticity
-            # when passing it in, simply keep negative vorticity as a variable
-            # but negating not expensive, and could lead to bugs down the line
-            #ψ_copy = copy(ψ)
-            ψ, num_iter1 = CG_Poisson(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3)
-            #ψ, num_iter2 = PCG_Poisson_diag(-ω, ψ, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
-            #@printf "CG: %d, PCG_diag %d\n" num_iter1 num_iter2
-            #@printf "PCG_diag %d\n" num_iter2
-            @printf "CG %d\n" num_iter1
-        else
-            ω_inner = @view ω[2:end-1, 2:end-1]
-            ω_vec = reshape(ω_inner, (N-2)*(N-2), 1)
-            # double check if negative or not
-            poisson_RHS = ω_vec
-            #poisson_RHS = -ω_vec
-            ψ_inner = @view ψ[2:end-1, 2:end-1]
-            ψ_vec = vec(ψ_inner)
-
-            #ψ_vec_copy = copy(ψ_vec)
-            #poisson_RHS_copy = copy(poisson_RHS)
-            #ψ_vec_copy, num_iter1 = CG_std(P, poisson_RHS_copy, ψ_vec_copy, ϵ, N^2)
-            #ψ_vec, num_iter2 = PCG_std(P, Minv, poisson_RHS, ψ_vec, ϵ, N^2)
-            ψ_vec, num_iter2 = ICCG(P, U, poisson_RHS, ψ_vec, ϵ, N^2)
-            #@printf "CG: %d, PCG %d\n" num_iter1 num_iter2
-            #ψ_vec, num_iter = ICCG_std(P, L, poisson_RHS, ψ_vec, ϵ, N^2)
-            #ψ_vec = P \ poisson_RHS
-            ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
-        end
-    end
 
 =#

@@ -123,6 +123,7 @@ function timing_test(u, opts)
     Minv = inv(Utmp'*Utmp)
     # convert both to sparse
     # doing this workaround because of bugs with setindex! and setting to 0
+    # labeling U as UpperTriangular seems to help a smidgen
     P = sparse(Ptmp)
     U = UpperTriangular(sparse(Utmp))
 

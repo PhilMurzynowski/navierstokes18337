@@ -1,3 +1,5 @@
+using Profile
+
 """
 Main file for entire directory.
 Also serves as example for how to run a simulation.
@@ -8,6 +10,9 @@ Also serves as example for how to run a simulation.
 
 include("gridSolver.jl")
 include("VorticityStream.jl")
+
+GLMakie.activate!()
+Makie.AbstractPlotting.inline!(false)
 
 # define velocity boundary conditions at the four walls
 BC_opts = Dict("u_top"=>1.0,
@@ -41,17 +46,21 @@ opts = Dict("timesteps"=>400,   # number of steps to simulate
 # choice 2: VorticityStream
 #solver = "Grid"
 #solver = "VorticityStream"
-solver = "both"
+solver = "VorticityStream"
 
 if solver == "Grid"
-    @time u, v, p = run_grid_simulation(opts, BC_opts)
+    u, v, p = run_grid_simulation(opts, BC_opts)
     plot_uvp(u, v, p, opts)
 elseif solver == "VorticityStream"
-    @time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
+    ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
     plot_ωψ(ω, ψ)
 else
     # runs both without plotting
     @time u, v, p = run_grid_simulation(opts, BC_opts)
     @time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
+    #@profile u, v, p = run_grid_simulation(opts, BC_opts)
+    #Profile.print()
+    #@profile ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
+    #Profile.print()
     return
 end
