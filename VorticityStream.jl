@@ -2,6 +2,7 @@ using LinearAlgebra, Kronecker
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap, contour
 using Printf
+using Preconditioners
 
 include("CG.jl")
 include("IChol.jl")
@@ -219,9 +220,14 @@ function runVorticityStream(opts, opts_BC)
         P = genPoissonMtx(N-2, opts)
         # preconditioner
         # sanity check with identity
-        #Minv = Diagonal(ones(size(P)))
+        Minv = Diagonal(ones(size(P)))
         # Incomplete Cholesky
-        L = ichol(P)
+        #L = ichol(P)
+        chol = cholesky(P)
+        U = chol.U
+        # incomplete cholesky
+        U[P .== 0.0] .= 0
+        Minv = inv(U'*U)
     end
 
     for i in 1:timesteps
@@ -250,9 +256,12 @@ function runVorticityStream(opts, opts_BC)
             ψ_inner = @view ψ[2:end-1, 2:end-1]
             ψ_vec = vec(ψ_inner)
 
-            #ψ_vec, num_iter = CG_std(P, poisson_RHS, ψ_vec, ϵ, N^2)
-            #ψ_vec, num_iter = PCG_std(P, Minv, poisson_RHS, ψ_vec, ϵ, N^2)
-            ψ_vec, num_iter = ICCG_std(P, L, poisson_RHS, ψ_vec, ϵ, N^2)
+            ψ_vec_copy = copy(ψ_vec)
+            poisson_RHS_copy = copy(poisson_RHS)
+            ψ_vec_copy, num_iter1 = CG_std(P, poisson_RHS_copy, ψ_vec_copy, ϵ, N^2)
+            ψ_vec, num_iter2 = PCG_std(P, Minv, poisson_RHS, ψ_vec, ϵ, N^2)
+            @printf "CG: %d, PCG %d\n" num_iter1 num_iter2
+            #ψ_vec, num_iter = ICCG_std(P, L, poisson_RHS, ψ_vec, ϵ, N^2)
             #ψ_vec = P \ poisson_RHS
             ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
         end
@@ -288,7 +297,7 @@ opts = Dict("N"=>N,
             "h"=>h,
             "dt"=>dt,
             "Re"=>300.0,
-            "ϵ"=>1e-6,         # tolerance parameter for CG
+            "ϵ"=>1e-10,         # tolerance parameter for CG
             "timesteps"=>100
             )
 @time ω, ψ = runVorticityStream(opts, BC_opts)

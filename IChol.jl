@@ -1,6 +1,7 @@
 using Printf
 using Kronecker
 using LinearAlgebra
+using Preconditioners
 
 """
 Incomplete Cholesky factorization
@@ -55,6 +56,7 @@ function genPoissonMtx(size, opts)
     return P
 end
 
+#= debuggin
 function tests(opts)
     @printf "test start\n\n\n"
     A = genPoissonMtx(opts["N"], opts)
@@ -63,6 +65,11 @@ function tests(opts)
     @printf "L\n"
     L = ichol(A)
     display(L)
+    @printf "L2\n"
+    out = CholeskyPreconditioner(A)
+    L2 = out.L
+    display(L2)
+    @assert isapprox(L, L2)
     @printf "Linv"
     Linv = inv(L)
     display(Linv)
@@ -74,8 +81,10 @@ function tests(opts)
     display(A_new)
 end
 
-N = 5
+
+N = 6
 opts = Dict("N"=>N,
             "h"=>1/N
             )
 tests(opts)
+=#
