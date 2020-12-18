@@ -3,6 +3,8 @@ using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
 using Printf
 
+# file name not capitalized to GridSolver.jl by accident
+
 """
 Few operations to set BC
 Inlined as only a few slicing operations
