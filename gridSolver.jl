@@ -209,96 +209,26 @@ end
 #pressure2 = zeros(N+2, N+2)
 #pressure_eps = grid_poisson_solve(pressure1, pressure2, v_dependence, opts)
 
-# not normally used in grid solver
-function genPoissonMtx(opts)
 
-    N = opts["N"]
-    hi = 1/opts["h"]
-    println("updated gen mtx")
-
-    L = zeros(N, N)
-    L[diagind(L, 0)] .= 2*hi^2
-    L[diagind(L, -1)] .= -1*hi^2
-    L[diagind(L, 1)] .= -1*hi^2
-    # build Poisson pressure matrix with Kronecker
-    # cant use I with Kronecker, not working
-    Id = 1*Matrix(I, N, N)
-    P = (Id ⊗ L) + (L ⊗ Id)
-    # Von Neumann BC and reference point modifications
-    BC = zeros(N, N)
-    BC[1, 1] = -hi^2
-    BC[N, N] = -hi^2
-    P += (Id ⊗ BC)
-    P[1:N, 1:N] += -hi^2*Id
-    P[N*(N-1)+1:N^2, N*(N-1)+1:N^2] += -hi^2*Id
-    #P[1, :] .= 0
-    #P[1, 1] = 1*hi^2
-    #P[N^2, :] .= 0
-    #P[N^2, 1] = 1*hi^2
-    return P
-end
-
-function poisson_solve(p, velocity_component, P, opts, use_CG=false)
-    if use_CG == false
-        sol = grid_poisson_solve(p, velocity_component, opts)
-    elseif use_CG == true
-        #= 
-        ignore, this will not work
-
-        b = reshape(velocity_component, N*N, 1)
-        x_guess = @view p[2:end-1, 2:end-1]
-        x_guess = reshape(x_guess, N*N, 1)
-        sol, iter = CG_std(P, b, x_guess, 1e-9)
-        sol = reshape(sol, N, N)
-        p[:, 1] = p[:, 2]
-        p[1, :] = p[2, :]
-        p[:, end] = p[:, end-1]
-        p[end, :] .= 0 # do this last to avoid overwriting
-        =#
-        return
-    end
-    return sol
-end
 
 function plot_uvp(u, v, p, opts)
     h = opts["h"]
     N = opts["N"]
    
-    # have to do some transposing and reversing here for formatting
-    # reverse ys because jmin is near top, while origin is bottom left
-    #display(u)
-    #display(v)
-    # using quiver
-    # not sure if can use streamplot
-    # figure out formatting to get right side up
-    xs = reverse(0.0:h:h*(N+1))
-    ys = reverse(0.0:h:h*(N+1))
+    # have to do some transposing here for formatting
+    # pretty sure not the cleanest way but got annoyed and left it for now
+    xs = 0.0:h:h*(N+1)
+    ys = 0.0:h:h*(N+1)
     quiv = quiver(xs, ys, u', v', arrowsize = 0.01)
-    println("u inside plot_uvp")
-    display(u)
-    println("v inside plot_uvp")
-    display(v)
 
-    # pressure
-    # testing
-    #p .= 0
-    #p[1] = 1
-    #p[2] = 2
-    #p[3] = 3
-    #p[65] = 4
-    # transpose and flip when plotting cause heatmap is weird
-    println("pressure inside plot_uvp")
-    display(p)
     p_xs = 0.0:h:h*(N-1)
     p_ys = 0.0:h:h*(N-1)
-    hm = AbstractPlotting.heatmap(p_xs, p_ys, reverse(p', dims=2))
+    hm = AbstractPlotting.heatmap(p_xs, p_ys, p')
     cl = colorlegend(hm[end], raw = true, camera = campixel!)
 
     parent = Scene(resolution= (1000, 500))
     full_scene = vbox(vbox(hm, cl), quiv, parent=parent)
     display(full_scene)
-
-    #test
     return
 end
 
@@ -309,7 +239,6 @@ function run_simulation(opts, BC_opts)
     sim_iter = opts["simulation_iter"]
     N = opts["N"]
 
-    P = genPoissonMtx(opts)
     u1_mtx, v1_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
     #u2_mtx, v2_mtx = zeros(N+2, N+2), zeros(N+2, N+2)
     #pressure1, pressure2 = zeros(N+2, N+2), zeros(N+2, N+2)
@@ -325,8 +254,8 @@ function run_simulation(opts, BC_opts)
         #println("v_dependence")
         #display(v_dependence)
         #pressure_eps, pressure1 = grid_poisson_solve(pressure1, pressure2, v_for_poisson, opts)
-        pressure_eps, pressure = poisson_solve(pressure, v_for_poisson, P, opts)
-        println(pressure_eps) # debuggin
+        pressure_eps, pressure = grid_poisson_solve(pressure, v_for_poisson, opts)
+        #println(pressure_eps) # debuggin
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
         #u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure, opts)
         u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, pressure, opts)
