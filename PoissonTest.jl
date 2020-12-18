@@ -23,6 +23,13 @@ function determine_source(pressure_field, size, spacing)
     return source
 end
 
+# Test
+#=
+CG(A, b, x_guess, ϵ, max_iter=1e3)
+PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
+
+F
+=#
 #=
 opts = Dict("N"=>N,
             "h"=>h,

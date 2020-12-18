@@ -1,6 +1,17 @@
 using LinearAlgebra, Printf
 
 """
+Included methods in CG.jl
+Conjugate Gradient                      CG(A, b, x_guess, ϵ, max_iter=1e3)
+Preconditioned CG                       PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
+CG specifcally for Poisson              CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
+    (no matrix passed in)
+Incomplete Cholesky CG                  ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
+    (fastest, may be updated
+    to use preallocated tmp arrays as well)
+"""
+
+"""
 CG, Conjugate Gradients implementation
 Symmetric Matrix A must be constructed and passed in.
 Warning:
@@ -249,6 +260,7 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     end
 
     # reuse x_guess
+    # Note: chance that this is buggy! double check
     x_guess[2:end-1, 2:end-1] = x
 
     return x_full, iter
