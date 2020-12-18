@@ -148,7 +148,7 @@ function timing_test(u, opts)
         ϵ = ϵs[i]
 
         # randomizing x_guess to prevent optimization
-        x_guess = rand(-1e-3:1e-3, length(source))
+        x_guess = rand(-1e-3:1e3, length(source))
 
         CG_time[i] = @elapsed CG_sol, CG_iter[i] = CG(P, source, x_guess, ϵ)
 
