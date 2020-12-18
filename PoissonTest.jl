@@ -64,7 +64,11 @@ function visual_test(u, xs, ys, opts)
     hm_PCG, cl_PCG = get_u_scene(xs, ys, reshape(PCG_sol, N, N))
     
     x_guess = zeros(length(source))
-    ICCG_sol, iter = ICCG(P, U, source, x_guess, ϵ)
+    tmp1 = zeros(N-2, N-2)
+    tmp2 = zeros(N-2, N-2)
+    tmp3 = zeros(N-2, N-2)
+    tmp4 = zeros(N-2, N-2)
+    ICCG_sol, iter = ICCG(P, U, source, x_guess, ϵ, tmp1, tmp2, tmp3, tmp4)
     hm_ICCG, cl_ICCG = get_u_scene(xs, ys, reshape(ICCG_sol, N, N))
 
     #=
@@ -154,7 +158,11 @@ function timing_test(u, opts)
 
         PCG_time[i] = @elapsed PCG_sol, PCG_iter[i] = PCG(P, Minv, source, x_guess, ϵ)
         
-        ICCG_time[i] = @elapsed ICCG_sol, ICCG_iter[i] = ICCG(P, U, source, x_guess, ϵ)
+        tmp1 = zeros(N-2, N-2)
+        tmp2 = zeros(N-2, N-2)
+        tmp3 = zeros(N-2, N-2)
+        tmp4 = zeros(N-2, N-2)
+        ICCG_time[i] = @elapsed ICCG_sol, ICCG_iter[i] = ICCG(P, U, source, x_guess, ϵ, tmp1, tmp2, tmp3, tmp4)
 
         # note, meant to use CG_Poisson here, but broken for some reason
 

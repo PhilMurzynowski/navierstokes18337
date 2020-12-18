@@ -46,7 +46,7 @@ opts = Dict("timesteps"=>400,   # number of steps to simulate
 # choice 2: VorticityStream
 #solver = "Grid"
 #solver = "VorticityStream"
-solver = "VorticityStream"
+solver = "both"
 
 if solver == "Grid"
     u, v, p = run_grid_simulation(opts, BC_opts)

@@ -246,7 +246,8 @@ function run_vorticitystream_simulation(opts, opts_BC)
         # pay once for the cost to conversion but during iteration
         # in the CG solver it becomes much more efficient
         ψ_vec = vec(ψ_inner)
-        ψ_vec, num_iter = ICCG(P, U, ω_vec, ψ_vec, ϵ, N^2)
+        ψ_vec, num_iter = ICCG(P, U, ω_vec, ψ_vec, ϵ, N)
+        #ψ_vec, num_iter = ICCG(P, U, ω_vec, ψ_vec, ϵ, tmp1, tmp2, tmp3, tmp4, N)
         # update ψ, only inner entries are updated as rest are Dirchlet BC
         ψ[2:end-1, 2:end-1] = reshape(ψ_vec, N-2, N-2)
     end

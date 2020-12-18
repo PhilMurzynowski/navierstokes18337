@@ -93,22 +93,28 @@ U is the Upper triangular of the incomplete Cholesky factorization
 
 UPDATE TO USE PREALLOCATED ARRAYS
 """
-function ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
-
+function ICCG(A, U, b, x_guess, ϵ, tmp1, tmp2, tmp3, tmp4, max_iter=1e3)
+    redisual = tmp1
     residual = b - A*x_guess
     # two triangular solves
     # Faster than multiplying by Minv
+    presidual = tmp2
     presidual = U' \ residual
     presidual = U \ presidual           # preconditioned residual
 
+    search_direction = tmp3
     search_direction = presidual        # use preconditioned residuals as conjugate search directions
     rTpr = dot(residual, presidual)     # save in variable to avoid repeat calculations
     rTpr_next = nothing                 # will need 2 vars for rTr
     x = x_guess
     iter = 0
 
+    mvp = tmp4
+
     # Warning: since using rTpr, not rTr, approximate
-    while rTpr > ϵ^2 && iter < max_iter
+    #while rTpr > ϵ^2 && iter < max_iter
+    # pay small performance cost for extra dot product, terminate accurately
+    while dot(residual, residual) > ϵ^2 && iter < max_iter
         #println(iter)
         iter += 1
         mvp = A*search_direction
@@ -282,7 +288,6 @@ end
 """
 Warning: This is actually totally useless precisely because all the diagonal entries
 are the same, reasoned after, now kept as proof of concept.
-
 Warning: Currently buggy, has also been replaced by ICCG.
 
 Same as CG_Poisson except also optimized to use a simple diagonal proconditioner.
