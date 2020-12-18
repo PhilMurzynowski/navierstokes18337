@@ -32,7 +32,7 @@ opts = Dict("timesteps"=>400,   # number of steps to simulate
             "dy"=>h,
             "h"=>h,
             "dt"=>dt,
-            "rho"=>1.0,         # ρ only available in GridSolver currently
+            "rho"=>1.0,         # ρ only available in GridSolver currently, so keep at 1 for comparison
             "Re"=>10,           # Reynolds number, easier to see simulation with lower Reynolds number
             )
 

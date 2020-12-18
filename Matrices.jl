@@ -1,7 +1,6 @@
 using Printf
 using Kronecker
 using LinearAlgebra
-using Preconditioners
 
 """
 Incomplete Cholesky factorization
@@ -40,9 +39,9 @@ function ichol(a)
 end
 
 
-function genPoissonMtx(size, opts)
+function genPoissonMtx(size, spacing)
     N = size
-    hi = 1/opts["h"]
+    hi = 1/spacing
 
     L = zeros(N, N)
     L[diagind(L, 0)] .= 2*hi^2
