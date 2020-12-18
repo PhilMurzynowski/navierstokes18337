@@ -116,13 +116,21 @@ function timing_test(u, opts)
     #ϵ = opts["ϵ"]
 
     # UPDATE genPoissonMtx
-    P = genPoissonMtx(N, h)
+    Ptmp = genPoissonMtx(N, h)
     # Incomplete Cholesky
     # UDPATE make all of these banded!
-    chol = cholesky(P)
-    U = chol.U
-    U[P .== 0.0] .= 0
-    Minv = inv(U'*U)
+    chol = cholesky(Ptmp)
+    Utmp = chol.U
+    Utmp[Ptmp .== 0.0] .= 0
+    Minv = inv(Utmp'*Utmp)
+    # update P after Cholesky factorization as
+    # no factorization exists for banded
+    #P = genPoissonMtxBanded(N, h)
+
+    # convert both to sparse
+    # doing this workaround because of bugs with setindex! and setting to 0
+    P = sparse(Ptmp)
+    U = sparse(Utmp)
 
     source = determine_source(u, P)
 

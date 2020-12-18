@@ -1,6 +1,8 @@
 using Printf
 using Kronecker
 using LinearAlgebra
+using BandedMatrices, BlockBandedMatrices
+using SparseArrays
 
 """
 Incomplete Cholesky factorization
@@ -55,35 +57,19 @@ function genPoissonMtx(size, spacing)
     return P
 end
 
-#= debuggin
-function tests(opts)
-    @printf "test start\n\n\n"
-    A = genPoissonMtx(opts["N"], opts)
-    @printf "A\n"
-    display(A)
-    @printf "L\n"
-    L = ichol(A)
-    display(L)
-    @printf "L2\n"
-    out = CholeskyPreconditioner(A)
-    L2 = out.L
-    display(L2)
-    @assert isapprox(L, L2)
-    @printf "Linv"
-    Linv = inv(L)
-    display(Linv)
-    #@printf "Minv\n"
-    #Minv = Linv'*Linv
-    #display(Minv)
-    @printf "LinvALinv'\n"
-    A_new = Linv*A*Linv'
-    display(A_new)
+"""
+Uses BandedBlock matrices for less space and more optimized operations.
+Followed: https://discourse.julialang.org/t/best-way-to-construct-2-d-laplacian-banded-matrix-bandedmatrices-sparse-or-blockbandedmatrices/29123
+"""
+function genPoissonMtxBanded(size, spacing)
+    n = size
+    h = spacing
+    L1D = BandedMatrix(0 => Fill(2/h^2,n), 1 => Fill(-1/h^2,n-1), -1 => Fill(-1/h^2,n-1))
+    D_xx = BandedBlockBandedMatrix(kron(L1D, Eye(n)))
+    D_yy = BandedBlockBandedMatrix(kron(Eye(n), L1D))
+    P = D_xx + D_yy
+    return P
 end
 
-
-N = 6
-opts = Dict("N"=>N,
-            "h"=>1/N
-            )
-tests(opts)
-=#
+#P = genPoissonMtxBanded(4, 1/4)
+#display(P)
