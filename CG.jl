@@ -53,9 +53,7 @@ function PCG_std(A, Minv, b, x_guess, ϵ, max_iter=1e3)
     x = x_guess
     iter = 0
 
-    # using l1 norm so don't have to square tiny ϵ
-    #while sum(abs.(residual)) > ϵ
-    while norm(residual, 1) > ϵ && iter < max_iter
+    while rTpr > ϵ^2 && iter < max_iter
         #println(iter)
         iter += 1
         mvp = A*search_direction
@@ -76,79 +74,46 @@ end
 
 """
 ICCG : Incomplte Cholesky Conjugate Gradient
-Very similar to CG and PCG except using Incomplete Cholesky specifically
-for preconditioning and postconditioning
-Same as CG_std except also making use of preconditioning
+Very similar to PCG except using Incomplete Cholesky
+for preconditioning, so can make more optimizations,
+i.e. using faster solves for triangular matrices.
 
 U is the Upper triangular of the incomplete Cholesky factorization
-Note: inverting U, not optimized for backsubsitution / othersolving yet
 """
-function ICCG_std(A, U, b, x_guess, ϵ, max_iter=1e3)
-
-    # precompute
-    Uinv = inv(U)
-    A_new = Linv*A*Linv'
+function ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
 
     residual = b - A*x_guess
-    search_direction = Linv*residual     # use preconditioned residuals as conjugate search directions
-    rTr = dot(residual, residual)   # save in variable to avoid repeat calculations
+    # two triangular solves
+    # should be faster than multiplying by Minv
+    presidual = U' \ residual
+    presidual = U \ presidual
+
+    search_direction = presidual     # use preconditioned residuals as conjugate search directions
+    rTpr = dot(residual, presidual)   # save in variable to avoid repeat calculations
     rTpr_next = nothing              # will need 2 vars for rTr
-    x = L*x_guess
+    x = x_guess
     iter = 0
 
-    while rTr > ϵ^2 && iter < max_iter
+    # since using rTpr not rTr approximate
+    while rTpr > ϵ^2 && iter < max_iter
         #println(iter)
         iter += 1
-        mvp = A_new*search_direction
-        step_size = rTr / dot(search_direction, mvp)
+        mvp = A*search_direction
+        step_size = rTpr / dot(search_direction, mvp)
         residual -= step_size.*mvp
-        rTr_next = dot(residual, residual)
-        gsc = rTr_next / rTr        # gram-schmidt elimination
-        rTr = rTr_next
+        presidual = U' \ residual
+        presidual = U \ presidual
+        rTpr_next = dot(residual, presidual)
+        gsc = rTpr_next / rTpr        # gram-schmidt elimination
+        rTpr = rTpr_next
         # update x
         x += step_size.*search_direction
-        search_direction = residual + gsc.*search_direction
+        search_direction = presidual + gsc.*search_direction
     end
 
-    x = Linv*x
     return x, iter # return solution and number of iterations for analysis
 
 end
-
-#= lower traingular version???
-function ICCG_std(A, L, b, x_guess, ϵ, max_iter=1e3)
-
-    # precompute
-    Linv = inv(L)
-    A_new = Linv*A*Linv'
-
-    residual = b - A*x_guess
-    search_direction = Linv*residual     # use preconditioned residuals as conjugate search directions
-    rTr = dot(residual, residual)   # save in variable to avoid repeat calculations
-    rTpr_next = nothing              # will need 2 vars for rTr
-    x = L*x_guess
-    iter = 0
-
-    # using l1 norm so don't have to square tiny ϵ
-    #while sum(abs.(residual)) > ϵ
-    while norm(residual, 1) > ϵ && iter < max_iter
-        #println(iter)
-        iter += 1
-        mvp = A_new*search_direction
-        step_size = rTr / dot(search_direction, mvp)
-        residual -= step_size.*mvp
-        rTr_next = dot(residual, residual)
-        gsc = rTr_next / rTr        # gram-schmidt elimination
-        rTr = rTr_next
-        # update x
-        x += step_size.*search_direction
-        search_direction = residual + gsc.*search_direction
-    end
-
-    x = Linv*x
-    return x, iter # return solution and number of iterations for analysis
-end
-=#
 
 # test CG_std
 function test_GC_std(A=nothing, b=nothing, ϵ=1e-9)
