@@ -71,20 +71,34 @@ function visual_test(u, xs, ys, opts)
     tmp2 = copy(tmp1)
     tmp3 = copy(tmp1)
     tmp4 = copy(tmp1)
-    CGPoisson_sol, iter = CG_Poisson(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3)
+    # note, meant to use CG_Poisson here, but broken for some reason and PCG_Poisson_diag is equivalent
+    CGPoisson_sol, iter = PCG_Poisson_diag(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     hm_CGPoisson, cl_CGPoisson = get_u_scene(xs, ys, CGPoisson_sol)
 
+    x_guess = zeros(N, N)
+    tmp = copy(x_guess)
+    Grid_sol, iter = grid_poisson_solve(x_guess, tmp, reshape(source, N, N)[2:end-1, 2:end-1], opts, 1e3)
+    hm_grid, cl_grid = get_u_scene(xs, ys, Grid_sol)
+
     # hacky way to arrange things
-    parent = Scene(resolution= (1000, 500))
+    parent = Scene(resolution= (400, 800))
     full_scene = hbox(
                     vbox(hm_actual, cl_actual),
                     vbox(hm_CG, cl_CG), 
                     vbox(hm_PCG, cl_PCG), 
                     vbox(hm_ICCG, cl_ICCG), 
                     vbox(hm_CGPoisson, cl_CGPoisson), 
-                    #vbox(hm_CG_Poisson, cl_CG_Poisson), 
                     parent=parent)
+    # separate plot for grid because its buggy
+    parent = Scene(resolution= (300, 300))
+    grid_scene = hbox(
+                    vbox(hm_grid, cl_grid), 
+                    parent=parent)
+    #println(iter)
+    #display(u)
+    #display(Grid_sol)
     display(full_scene)
+    display(grid_scene)
     return
 end
 
@@ -111,18 +125,17 @@ function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
 # parameters for test
 N = 32
 h = 1/N
-ϵ = 1e-10
+ϵ = 1e-4
 opts = Dict("N"=>N,
             "h"=>h,
-            "ϵ"=>ϵ
+            "ϵ"=>ϵ,
+            "rho"=>1.0
             )
 xs = 0.0:h:h*(N-1)
 ys = 0.0:h:h*(N-1)
 actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
 visual_test(actual_u, xs, ys, opts)
 #=
-xs_extend = 0.0:h:h*(N+1)
-ys_extend = 0.0:h:h*(N+1)
 actual_pressure = zeros(N, N)
 #actual_pressure = [x*y for y in ys, x in xs]
 #actual_pressure = [sin(2*x)+4*cos(4*y) for y in ys, x in xs]

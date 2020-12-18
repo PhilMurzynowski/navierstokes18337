@@ -123,8 +123,8 @@ Currently using broadcast operations on matrices for vectorization
 """
 function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
     
-    Δx = opts["dx"]
-    Δy = opts["dy"]
+    Δx = opts["h"]
+    Δy = opts["h"]
     ρ = opts["rho"]
     ϵ = opts["ϵ"]
 
@@ -155,7 +155,7 @@ function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
 
         residual = norm(p2 - p1)
         p2, p1 = p1, p2
-        #@printf "iter: %d, residual: %10f\n" iter residual
+        #@printf "iter: %d, residual: %3.10f\n" iter residual
     end
 
     return p2, iter

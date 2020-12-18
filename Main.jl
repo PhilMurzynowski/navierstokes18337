@@ -18,7 +18,7 @@ BC_opts = Dict("u_top"=>1.0,
 # define general options and specific parameters
 # e.g. General: timestep size, simulation size
 # but for VorticityStream Solver may want flags for how to solve Poisson Eq
-# e.g whether to us CG, PCG, ICCG, banded..
+# e.g whether to us CG, PCG, ICCG, specified in CG.jl
 
 N = 32
 h = 1/N         # chose this spacing largely for visuals
@@ -39,9 +39,9 @@ opts = Dict("timesteps"=>400,   # number of steps to simulate
 # run simulation with desired solver
 # choice 1: Grid
 # choice 2: VorticityStream
-#solver = "Grid"
+solver = "Grid"
 #solver = "VorticityStream"
-solver = "both"
+#solver = "both"
 
 if solver == "Grid"
     @time u, v, p = run_grid_simulation(opts, BC_opts)
