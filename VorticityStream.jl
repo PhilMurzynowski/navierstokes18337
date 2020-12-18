@@ -1,16 +1,17 @@
-using LinearAlgebra, Kronecker
+using LinearAlgebra
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap, contour
 using Printf
-using Preconditioners
+
+# example included at end of file
 
 include("CG.jl")
-include("IChol.jl")
+include("Matrices.jl")
 
-# general functions
 
 # could this be fused to updateVoriticity for better cache use, repeating this question everywhere ha
-function updateVorticityWallBC!(ω, ψ, opts, opts_BC)
+function vs_updateVorticityWallBC!(ω, ψ, opts, opts_BC)
+
     h = opts["h"]
     N = opts["N"]
 
@@ -74,7 +75,7 @@ Update vorticity one timestep
 Note: use normal edition for more performance
       left for benchmarking convenience against standard version
 """
-function updateVorticity_branching(ω, ω_next, ψ, opts)
+function vs_updateVorticity_branching(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
@@ -119,7 +120,7 @@ Update vorticity one timestep
 Notes:
     @inbounds may likely be overkill given recent Julia updates, included for assurance
 """
-function updateVorticity(ω, ω_next, ψ, opts)
+function vs_updateVorticity(ω, ω_next, ψ, opts)
     Δt = opts["dt"]
     h = opts["h"]   # just use h since know using dx and dy equal
     Re = opts["Re"]
@@ -199,7 +200,7 @@ end
 # believe can eliminate storing velocity
 
 
-function runVorticityStream(opts, opts_BC)
+function run_vorticitystream_simulation(opts, opts_BC)
     N = opts["N"]
     ϵ = opts["ϵ"]
     timesteps = opts["timesteps"]
@@ -222,17 +223,15 @@ function runVorticityStream(opts, opts_BC)
         # sanity check with identity
         Minv = Diagonal(ones(size(P)))
         # Incomplete Cholesky
-        #L = ichol(P)
         chol = cholesky(P)
         U = chol.U
-        # incomplete cholesky
         U[P .== 0.0] .= 0
-        Minv = inv(U'*U)
+        #Minv = inv(U'*U)
     end
 
     for i in 1:timesteps
-        updateVorticityWallBC!(ω, ψ, opts, opts_BC)
-        ω  = updateVorticity(ω, ωtmp, ψ, opts)
+        vs_updateVorticityWallBC!(ω, ψ, opts, opts_BC)
+        ω  = vs_updateVorticity(ω, ωtmp, ψ, opts)
         # perhaps keep vorticity negated if going to be flipping sign
         # or do the negative in the CG_Poisson solver
 
@@ -269,21 +268,20 @@ function runVorticityStream(opts, opts_BC)
     end
 
     return ω, ψ
-
 end
 
 function plot_ωψ(ω, ψ)
     h = opts["h"]
     N = opts["N"]
-    display(ω)
-    display(ψ)
     xs = 0.0:h:h*(N-1)
     ys = 0.0:h:h*(N-1)
     c = contour(xs, ys, ψ')
-    display(c)
 end
 
-N = 10
+#=
+# example
+
+N = 32
 h = 1/N
 dt = 0.001
 BC_opts = Dict("u_top"=>1.0,
@@ -297,9 +295,11 @@ opts = Dict("N"=>N,
             "dy"=>h,
             "h"=>h,
             "dt"=>dt,
-            "Re"=>300.0,
-            "ϵ"=>1e-10,         # tolerance parameter for CG
+            "Re"=>10.0,
+            "ϵ"=>1e-4,         # tolerance parameter for CG
             "timesteps"=>100
             )
-@time ω, ψ = runVorticityStream(opts, BC_opts)
+@time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
 plot_ωψ(ω, ψ)
+
+=#

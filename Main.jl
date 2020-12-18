@@ -7,6 +7,7 @@ Also serves as example for how to run a simulation.
 """
 
 include("gridSolver.jl")
+include("VorticityStream.jl")
 
 # define velocity boundary conditions at the four walls
 BC_opts = Dict("u_top"=>1.0,
@@ -20,10 +21,10 @@ BC_opts = Dict("u_top"=>1.0,
 # e.g whether to us CG, PCG, ICCG, banded..
 
 N = 32
-h = 3/N         # chose this spacing largely for visuals
+h = 1/N         # chose this spacing largely for visuals
 dt = 0.001      # timestep
 opts = Dict("timesteps"=>400,   # number of steps to simulate                
-            "ϵ"=>1e-4,          # tolerance for Solving Poisson Eqauation       
+            "ϵ"=>1e-8,          # tolerance for Solving Poisson Eqauation       
             "N"=>N,
             "Nx"=>N,            # Nx, Ny left in here equal to N as a reminder that the region is square
             "Ny"=>N,            # admittedly clunky, left in for update to non-square regions
@@ -38,11 +39,19 @@ opts = Dict("timesteps"=>400,   # number of steps to simulate
 # run simulation with desired solver
 # choice 1: Grid
 # choice 2: VorticityStream
-solver = "Grid"
+#solver = "Grid"
+#solver = "VorticityStream"
+solver = "both"
 
 if solver == "Grid"
-    u, v, p = run_grid_simulation(opts, BC_opts)
+    @time u, v, p = run_grid_simulation(opts, BC_opts)
     plot_uvp(u, v, p, opts)
 elseif solver == "VorticityStream"
+    @time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
+    plot_ωψ(ω, ψ)
+else
+    # runs both without plotting
+    @time u, v, p = run_grid_simulation(opts, BC_opts)
+    @time ω, ψ = run_vorticitystream_simulation(opts, BC_opts)
     return
 end
