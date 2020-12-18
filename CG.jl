@@ -1,12 +1,13 @@
 using LinearAlgebra, Printf
 
-# CG, Conjugate Gradients implementation
-
-# standard method involving multiplying matrices
-# matrix A must be constructed and passed in
-# warning do not use tolerance very close to machine error
-#   as this funciton does not specially account for roundoff error
-function CG_std(A, b, x_guess, ϵ, max_iter=1e3)
+"""
+CG, Conjugate Gradients implementation
+Symmetric Matrix A must be constructed and passed in.
+Warning:
+    Do not use tolerance very close to machine error
+    as this funciton does not specially account for roundoff error.
+"""
+function CG(A, b, x_guess, ϵ, max_iter=1e3)
 
     residual = b - A*x_guess
     search_direction = residual     # use residuals as conjugate search directions
@@ -15,10 +16,7 @@ function CG_std(A, b, x_guess, ϵ, max_iter=1e3)
     x = x_guess
     iter = 0
 
-    # using l1 norm so don't have to square tiny ϵ
-    #while sum(abs.(residual)) > ϵ
-    while norm(residual, 1) > ϵ && iter < max_iter
-        #println(iter)
+    while rTr > ϵ^2 && iter < max_iter
         iter += 1
         # single matrix vector product optimization
         mvp = A*search_direction
@@ -38,23 +36,23 @@ end
 
 """
 Same as CG_std except also making use of preconditioning
-Minv is the preconditioner, passsed in as a matrix
-Note: consider passing in preallocated memory?
-Note: now requires an extra matrix vector product for preconditioning
-each iteration
+Minv is the preconditioner, passsed in as a matrix.
+Now requires an extra matrix vector product for preconditioning
+    each iteration.
+Note: 
+    Consider modifying the function passing in preallocated memory.
 """
-function PCG_std(A, Minv, b, x_guess, ϵ, max_iter=1e3)
+function PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
 
     residual = b - A*x_guess
     presidual = Minv*residual
     search_direction = presidual     # use preconditioned residuals as conjugate search directions
-    rTpr = dot(residual, presidual)   # save in variable to avoid repeat calculations
+    rTpr = dot(residual, presidual)  # save in variable to avoid repeat calculations
     rTpr_next = nothing              # will need 2 vars for rTr
     x = x_guess
     iter = 0
 
     while rTpr > ϵ^2 && iter < max_iter
-        #println(iter)
         iter += 1
         mvp = A*search_direction
         step_size = rTpr / dot(search_direction, mvp)
@@ -76,26 +74,29 @@ end
 ICCG : Incomplte Cholesky Conjugate Gradient
 Very similar to PCG except using Incomplete Cholesky
 for preconditioning, so can make more optimizations,
-i.e. using faster solves for triangular matrices.
+i.e.
+    Using faster solves for banded, sparse triangular matrices instead of calculating
+    Minv which may be dense.
 
 U is the Upper triangular of the incomplete Cholesky factorization
+
+UPDATE TO USE PREALLOCATED ARRAYS
 """
 function ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
 
     residual = b - A*x_guess
     # two triangular solves
-    # should be faster than multiplying by Minv
-    # preconditioned residual
+    # Faster than multiplying by Minv
     presidual = U' \ residual
-    presidual = U \ presidual
+    presidual = U \ presidual           # preconditioned residual
 
-    search_direction = presidual     # use preconditioned residuals as conjugate search directions
-    rTpr = dot(residual, presidual)   # save in variable to avoid repeat calculations
-    rTpr_next = nothing              # will need 2 vars for rTr
+    search_direction = presidual        # use preconditioned residuals as conjugate search directions
+    rTpr = dot(residual, presidual)     # save in variable to avoid repeat calculations
+    rTpr_next = nothing                 # will need 2 vars for rTr
     x = x_guess
     iter = 0
 
-    # since using rTpr not rTr approximate
+    # Warning: since using rTpr, not rTr, approximate
     while rTpr > ϵ^2 && iter < max_iter
         #println(iter)
         iter += 1
@@ -117,7 +118,7 @@ function ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
 end
 
 # test CG_std
-function test_GC_std(A=nothing, b=nothing, ϵ=1e-9)
+function test_GC(A=nothing, b=nothing, ϵ=1e-9)
 
     if A === nothing || b === nothing
         # very likely to be full rank if random
@@ -128,7 +129,7 @@ function test_GC_std(A=nothing, b=nothing, ϵ=1e-9)
     end
 
     x_direct = A \ b
-    x_CG, num_iter = CG_std(A, b, vec(zeros(length(b))), ϵ)
+    x_CG, num_iter = CG(A, b, vec(zeros(length(b))), ϵ)
     @printf "number iterations: %d for epsilon: %.16f\n" num_iter ϵ
     #display(x_direct)
     #display(x_direct)
@@ -141,10 +142,20 @@ end
 CG gradient method specialized for 2D Poisson equation
 with Dirchlet Boundary conditions on all 4 sides.
 
-Do not need to generate Poisson matrix.
+Main advantage: Do not need to generate and pass in Poisson matrix.
+Main disadvantages: cannot easily take advantage of fast matrix mulitplies in Julia
+    for sparse, banded matrices, and cannot easily apply a general class of preconditioners,
+    not scalable to write out all multiplications in loops.
 
-Note: everything is kept and expected to be passed in a 2D Array, makes for more
-readable indexing
+Due to the disadvantages above, CG, PCG, and ICCG preferred if using special sparse or banded matrices.
+
+Notes: Everything is kept and expected to be passed in a 2D Array, makes for more
+        readable indexing.
+    Uses preallocated memory.
+Optimization Notes:
+    A new tmp variable can be used so that x does not have to be sliced every iteration.
+    Only slice and update x just before returning it
+        x[2:end-1, 2:end-1] .+= step_size*search_direction
 """
 function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     N = opts["N"]
@@ -175,14 +186,14 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     search_direction = copy(residual)
     rTr = dot(residual, residual)
     rTr_next = nothing
-    x = x_guess
+    # only one slice, so don't slice during iteration
+    x = x_guess[2:end-1, 2:end-1]
     iter = 0
     # storage for matrix vector product
     # passed memory for reuse
     # does not matter if garbage in tmp1,
     # mvp will be fully overwritten before use
     mvp = tmp3
-
     
     @inline bottomleft(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j+1, i])
     @inline left(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j+1, i] + sd[j-1, i])
@@ -194,8 +205,7 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
     @inline top(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j-1, i])
     @inline bottom(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j+1, i])
 
-    # using l1 norm so don't have to square tiny ϵ
-    while norm(residual, 1) > ϵ
+    while rTr > ϵ^2
         iter += 1
 
         # left column
@@ -234,25 +244,28 @@ function CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
         rTr = rTr_next
         # update x solution
         # using broadcast operation instead of loop to encourage vectorizing
-        # will += of a slice create a new array... check
-        x[2:end-1, 2:end-1] .+= step_size*search_direction
+        x .+= step_size*search_direction
         search_direction = residual + gsc.*search_direction
     end
 
-    return x, iter
+    # reuse x_guess
+    x_guess[2:end-1, 2:end-1] = x
+
+    return x_full, iter
 
 end
 
 """
+Warning: This is actually totally useless precisely because all the diagonal entries
+are the same, reasoned after, now kept as proof of concept.
+
 Same as CG_Poisson except also optimized to use a simple diagonal proconditioner.
 Furthermore, since the 2D Poisson Matrix has the same constant value on the diagonals,
 it is especially easy to implement using broadcast operations.
 
-Apply M^-1 to the initual residual once instead of both A and b,
-and keep applying to residual.
-
-Warning: However, this is actually totally useless precisely because all the diagonal entries
-are the same, reasoned after, now used as proof of concept.
+Optimization Notes:
+    Apply M^-1 to the initual residual once instead of both A and b,
+    and keep applying to residual.
 """
 function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     N = opts["N"]
@@ -313,8 +326,7 @@ function PCG_Poisson_diag(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
     @inline top(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j-1, i])
     @inline bottom(sd, j, i) = ih_sq*(sd[j, i+1] - 4*sd[j, i] + sd[j, i-1] + sd[j+1, i])
 
-    # using l1 norm so don't have to square tiny ϵ
-    while norm(residual, 1) > ϵ
+    while rTr > ϵ^2
         iter += 1
 
         # left column
