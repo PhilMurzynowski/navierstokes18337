@@ -109,27 +109,58 @@ end
 """
 Given a source vector compare timings of different solution methods.
 """
-function timing_test(source)
+function timing_test(u, opts)
+
+    N = opts["N"]
+    h = opts["h"]
+    ϵ = opts["ϵ"]
+
+    # UPDATE genPoissonMtx
+    P = genPoissonMtx(N, h)
+    # Incomplete Cholesky
+    # UDPATE make all of these banded!
+    chol = cholesky(P)
+    U = chol.U
+    U[P .== 0.0] .= 0
+    Minv = inv(U'*U)
+
+    source = determine_source(u, P)
+
+    # zero out every time to be sure
+    x_guess = zeros(length(source))
+    CG_time = @elapsed CG_sol, CG_iter = CG(P, source, x_guess, ϵ)
+
+    x_guess = zeros(length(source))
+    PCG_time = @elapsed PCG_sol, PCG_iter = PCG(P, Minv, source, x_guess, ϵ)
+    
+    x_guess = zeros(length(source))
+    ICCG_time = @elapsed ICCG_sol, ICCG_iter = ICCG(P, U, source, x_guess, ϵ)
+
+    #=
+    x_guess = zeros(N, N)
+    tmp1 = zeros(N-2, N-2)
+    tmp2 = copy(tmp1)
+    tmp3 = copy(tmp1)
+    tmp4 = copy(tmp1)
+    # note, meant to use CG_Poisson here, but broken for some reason and PCG_Poisson_diag is equivalent
+    CGPoisson_sol, iter = PCG_Poisson_diagonal(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
+    =#
+
+    x_guess = zeros(N, N)
+    tmp = copy(x_guess)
+    grid_time = @elapsed grid_sol, grid_iter = grid_poisson_solve(x_guess, tmp, reshape(source, N, N)[2:end-1, 2:end-1], opts, 2e3)
+
+    @printf "Size (N): %d, ϵ: %.10f\n" N ϵ
+    @printf "Times:\n Grid: %f, CG: %f, PCG: %f, ICCG: %f\n" grid_time CG_time PCG_time ICCG_time
+    @printf "Iterations:\n Grid: %f, CG: %f, PCG: %f, ICCG: %f\n" grid_iter CG_iter PCG_iter ICCG_iter
+
     return
 end
-
-#Test
-#=
-CG(A, b, x_guess, ϵ, max_iter=1e3)
-PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
-CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
-ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
-
-Then retest all with BandedMatrices
-
-# also test this! might need some reformatting
-function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
-=#
 
 # parameters for test
 N = 32
 h = 1/N
-ϵ = 1e-4
+ϵ = 1e-6
 opts = Dict("N"=>N,
             "h"=>h,
             "ϵ"=>ϵ,
@@ -140,5 +171,8 @@ ys = 0.0:h:h*(N-1)
 # a bunch of test u
 #actual_u = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
 actual_u = [sin(8*x)+4*cos(8*y) for y in ys, x in xs]
-visual_test(actual_u, xs, ys, opts)
+
+# call tests
+#visual_test(actual_u, xs, ys, opts)
+timing_test(actual_u, opts)
 
