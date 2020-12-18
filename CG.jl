@@ -85,6 +85,7 @@ function ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
     residual = b - A*x_guess
     # two triangular solves
     # should be faster than multiplying by Minv
+    # preconditioned residual
     presidual = U' \ residual
     presidual = U \ presidual
 

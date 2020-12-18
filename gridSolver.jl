@@ -4,12 +4,13 @@ using AbstractPlotting: Node, hbox, vbox, heatmap
 using Printf
 
 # file name not capitalized to GridSolver.jl by accident
+# example setup at end of file, commented out
 
 """
 Few operations to set BC
 Inlined as only a few slicing operations
 """
-@inline function set_vel_BC!(u, v, opts_BC)
+@inline function grid_set_vel_BC!(u, v, opts_BC)
     u_top = opts_BC["u_top"]
     u_bottom = opts_BC["u_bottom"]
     v_left = opts_BC["v_left"]
@@ -37,11 +38,11 @@ Inlining because many of these functions will be reusing views,
 Use two arrays with swapping for memory reuse, u2, v2 can initially be garbage
     in the inner points, the BC must be set properly for both
 """
-@inline function velocity_update(u1, v1, u2, v2, p, opts)
+@inline function grid_velocity_update(u1, v1, u2, v2, p, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
-    μ = opts["mu"]
+    μ = 1/opts["Re"]
     ρ = opts["rho"]
 
     u1_c = @view u1[2:end-1, 2:end-1]
@@ -85,7 +86,7 @@ function to assemble term describing pressure dependence on velocity
     output: v_dependence
         passed in for memory reuse
 """
-function v2p(v_dependence, u, v, opts)
+function grid_v2p(v_dependence, u, v, opts)
     Δt = opts["dt"]
     Δx = opts["dx"]
     Δy = opts["dy"]
@@ -182,9 +183,9 @@ function plot_uvp(u, v, p, opts)
 end
 
 
-function run_simulation(opts, BC_opts)
+function run_grid_simulation(opts, BC_opts)
     
-    sim_iter = opts["simulation_iter"]
+    sim_iter = opts["timesteps"]
     N = opts["N"]
 
     # preallocate
@@ -195,14 +196,13 @@ function run_simulation(opts, BC_opts)
 
     # as will be swapping u1, u2 and v1, v2 make sure both have BC
     # BC will not be affected in future as only update inner points
-    set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
-    set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
+    grid_set_vel_BC!(u1_mtx, v1_mtx, BC_opts)
+    grid_set_vel_BC!(u2_mtx, v2_mtx, BC_opts)
 
     for s in 1:sim_iter
-        v_for_poisson = v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
+        v_for_poisson = grid_v2p(v_for_poisson, u1_mtx, v1_mtx, opts)
         pressure1, num_iter = grid_poisson_solve(pressure1, pressure2, v_for_poisson, opts)
-        #pressure1, num_iter = grid_poisson_solve(pressure1, v_for_poisson, opts)
-        u1_mtx, v1_mtx = velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
+        u1_mtx, v1_mtx = grid_velocity_update(u1_mtx, v1_mtx, u2_mtx, v2_mtx, pressure1, opts)
     end
     
     return u1_mtx, v1_mtx, pressure1
@@ -210,14 +210,15 @@ function run_simulation(opts, BC_opts)
 end
 
 
+#= example
 N = 32
 h = 3/N # chose this spacing largely for visuals
 dt = 0.001
 # have to make rho 1 as didn't get around to including rho in later iterations
 # rho = 10.0
 rho = 1.0
-mu = 0.15
-opts = Dict("simulation_iter"=>100,                
+Re = 150
+opts = Dict("timesteps"=>100,                
             "ϵ"=>1e-4,          
             "N"=>N,
             "Nx"=>N,
@@ -227,7 +228,7 @@ opts = Dict("simulation_iter"=>100,
             "h"=>h,
             "dt"=>dt,
             "rho"=>rho,
-            "mu"=>mu,
+            "Re"=>mu,
             )
 BC_opts = Dict("u_top"=>1.0,
                "u_bottom"=>0.0,
@@ -235,5 +236,7 @@ BC_opts = Dict("u_top"=>1.0,
                "v_right"=>0.0)
 
 
-u, v, p = run_simulation(opts, BC_opts)
+u, v, p = run_grid_simulation(opts, BC_opts)
 plot_uvp(u, v, p, opts)
+
+=#
