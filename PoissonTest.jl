@@ -1,6 +1,7 @@
 using LinearAlgebra
 using Makie, AbstractPlotting
 using AbstractPlotting: Node, hbox, vbox, heatmap
+using BenchmarkTools
 
 include("Matrices.jl")
 include("CG.jl")
@@ -8,27 +9,72 @@ include("CG.jl")
 """
 File dedicated to testing and benchmarking different approaches to solving Poisson Eq.
 Testing approach:
-    1. A pressure field is generated
-    2. Source terms are determined by multiplying pressure field by laplacian
-    3. Validate solver by checking pressure field after solving Poisson Eq given source terms
+    1. A solution, u, is generated (e.g. an example pressure field)
+    2. Source terms are determined by multiplying u by laplacian
+    3. Validate solver by comparing to starting u after solving Poisson Eq given source terms
 Note: A nice update would be to use surface plots instead later! would be cooler!
 """
 
 """
-Given a pressure field to test against, return the appropriate source vector
+Given a u, return the appropriate source vector
 """
-function determine_source(pressure_field, size, spacing)
-    P = genPoissonMtx(size, spacing)
-    source = P*vec(pressure_field)
+function determine_source(u, P)
+    source = P*vec(u)
     return source
 end
 
-# Test
+"""
+Given u, create heatmap
+"""
+function get_u_scene(xs, ys, u)
+    # likely don't need this reverse tranpose shenangians but ok for now
+    hm = heatmap(xs, ys, reverse(u', dims=2), colormap=:berlin, show_axis=false)
+    cl = colorlegend(hm[end], raw = true, camera = campixel!)
+    return hm, cl
+end
+
+"""
+Given u show that all solvers output the correct solution.
+"""
+function visual_test(u, size, spacing, ϵ)
+    xs = 0.0:h:h*(N-1)
+    ys = 0.0:h:h*(N-1)
+    hm, cl = get_u_scene(xs, ys, u)
+
+    #P = genPoissonMtx(size, spacing)
+    #source = determine_source(u, P)
+    #x_guess = zeros(length(source))
+    #CG_sol = CG(P, source, x_guess, ϵ)
+
+    # hacky way to arrange things
+    parent = Scene(resolution= (1000, 500))
+    full_scene = hbox(
+                    vbox(hm_actual, cl_actual),
+                    #vbox(hm_CG_std, cl_CG_std), 
+                    #vbox(hm_CG_Poisson, cl_CG_Poisson), 
+                    parent=parent)
+    display(full_scene)
+    return
+end
+
+"""
+Given a source vector compare timings of different solution methods.
+"""
+function timing_test(source)
+    return
+end
+
+#Test
 #=
 CG(A, b, x_guess, ϵ, max_iter=1e3)
 PCG(A, Minv, b, x_guess, ϵ, max_iter=1e3)
+CG_Poisson(b, x_guess, ϵ, opts, tmp1, tmp2, tmp3)
+ICCG(A, U, b, x_guess, ϵ, max_iter=1e3)
 
-F
+Then retest all with BandedMatrices
+
+# also test this! might need some reformatting
+function grid_poisson_solve(p1, p2, velocity_component, opts, max_iter=500)
 =#
 #=
 opts = Dict("N"=>N,
@@ -36,27 +82,18 @@ opts = Dict("N"=>N,
             )
 =#
 # parameters for test
+
+#=
 N = 32
 h = 1/N
-xs = 0.0:h:h*(N-1)
-ys = 0.0:h:h*(N-1)
 xs_extend = 0.0:h:h*(N+1)
 ys_extend = 0.0:h:h*(N+1)
 actual_pressure = zeros(N, N)
 #actual_pressure = [x*y for y in ys, x in xs]
 #actual_pressure = [sin(2*x)+4*cos(4*y) for y in ys, x in xs]
 actual_pressure = [sinc(sqrt(x^2+y^2)) for y in ys, x in xs]
+=#
 
-hm_actual = heatmap(xs_extend, ys_extend, reverse(actual_pressure', dims=2), colormap=:berlin, show_axis=false)
-cl_actual = colorlegend(hm_actual[end], raw = true, camera = campixel!)
+#hm_actual = heatmap(xs_extend, ys_extend, reverse(actual_pressure', dims=2), colormap=:berlin, show_axis=false)
+#cl_actual = colorlegend(hm_actual[end], raw = true, camera = campixel!)
 
-# plotting
-# hacky way to arrange things
-# can arrange things more cleverly if dont look good
-parent = Scene(resolution= (1000, 500))
-full_scene = hbox(
-                vbox(hm_actual, cl_actual),
-                #vbox(hm_CG_std, cl_CG_std), 
-                #vbox(hm_CG_Poisson, cl_CG_Poisson), 
-                parent=parent)
-display(full_scene)
