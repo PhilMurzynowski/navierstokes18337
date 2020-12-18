@@ -113,7 +113,7 @@ function timing_test(u, opts)
 
     N = opts["N"]
     h = opts["h"]
-    ϵ = opts["ϵ"]
+    #ϵ = opts["ϵ"]
 
     # UPDATE genPoissonMtx
     P = genPoissonMtx(N, h)
@@ -126,33 +126,56 @@ function timing_test(u, opts)
 
     source = determine_source(u, P)
 
-    # zero out every time to be sure
-    x_guess = zeros(length(source))
-    CG_time = @elapsed CG_sol, CG_iter = CG(P, source, x_guess, ϵ)
+    datapts = 20
+    ϵs = 10 .^ range(-4, -10, length=datapts)
+    CG_time = zeros(datapts)
+    PCG_time = zeros(datapts)
+    ICCG_time = zeros(datapts)
+    grid_time = zeros(datapts)
 
-    x_guess = zeros(length(source))
-    PCG_time = @elapsed PCG_sol, PCG_iter = PCG(P, Minv, source, x_guess, ϵ)
-    
-    x_guess = zeros(length(source))
-    ICCG_time = @elapsed ICCG_sol, ICCG_iter = ICCG(P, U, source, x_guess, ϵ)
+    CG_iter = zeros(datapts)
+    PCG_iter = zeros(datapts)
+    ICCG_iter = zeros(datapts)
+    grid_iter = zeros(datapts)
 
-    #=
-    x_guess = zeros(N, N)
-    tmp1 = zeros(N-2, N-2)
-    tmp2 = copy(tmp1)
-    tmp3 = copy(tmp1)
-    tmp4 = copy(tmp1)
-    # note, meant to use CG_Poisson here, but broken for some reason and PCG_Poisson_diag is equivalent
-    CGPoisson_sol, iter = PCG_Poisson_diagonal(reshape(source, N, N), x_guess, ϵ, opts, tmp1, tmp2, tmp3, tmp4)
-    =#
+    i = 0
+    for j in 1:datapts+1
 
-    x_guess = zeros(N, N)
-    tmp = copy(x_guess)
-    grid_time = @elapsed grid_sol, grid_iter = grid_poisson_solve(x_guess, tmp, reshape(source, N, N)[2:end-1, 2:end-1], opts, 2e3)
+        i+= 1
+        ϵ = ϵs[i]
 
-    @printf "Size (N): %d, ϵ: %.10f\n" N ϵ
-    @printf "Times:\n Grid: %f, CG: %f, PCG: %f, ICCG: %f\n" grid_time CG_time PCG_time ICCG_time
-    @printf "Iterations:\n Grid: %f, CG: %f, PCG: %f, ICCG: %f\n" grid_iter CG_iter PCG_iter ICCG_iter
+        # randomizing x_guess to prevent optimization
+        x_guess = rand(-1e-3:1e-3, length(source))
+
+        CG_time[i] = @elapsed CG_sol, CG_iter[i] = CG(P, source, x_guess, ϵ)
+
+        PCG_time[i] = @elapsed PCG_sol, PCG_iter[i] = PCG(P, Minv, source, x_guess, ϵ)
+        
+        ICCG_time[i] = @elapsed ICCG_sol, ICCG_iter[i] = ICCG(P, U, source, x_guess, ϵ)
+
+        # note, meant to use CG_Poisson here, but broken for some reason
+
+        tmp = reshape(copy(x_guess), N, N)
+        grid_time[i] = @elapsed grid_sol, grid_iter[i] = grid_poisson_solve(reshape(x_guess, N, N), tmp, reshape(source, N, N)[2:end-1, 2:end-1], opts, 2e3)
+
+        @printf "Size (N): %d, ϵ: %.10f\n" N ϵ
+        @printf "Times:\n Grid: %f, CG: %f, PCG: %f, ICCG: %f\n" grid_time[i] CG_time[i] PCG_time[i] ICCG_time[i]
+        @printf "Iterations:\n Grid: %d, CG: %d, PCG: %d, ICCG: %d\n" grid_iter[i] CG_iter[i] PCG_iter[i] ICCG_iter[i]
+
+        # from 2nd run on will be faster to to JIT compile
+        # so overwrite first
+        if i == 1
+            i -= 1
+        end
+    end
+
+    timings = Scene()
+    eps = reverse(ϵs)
+    plot!(eps, grid_time)
+    plot!(eps, CG_time)
+    plot!(eps, PCG_time)
+    plot!(eps, ICCG_time)
+    display(timings)
 
     return
 end
